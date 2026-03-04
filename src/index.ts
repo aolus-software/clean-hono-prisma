@@ -1,9 +1,9 @@
-import { Hono } from "hono";
+import { AppConfig } from "@config";
+import app from "./app";
 
-const app = new Hono();
+console.log(`Starting server on port ${AppConfig.APP_PORT}`);
 
-app.get("/", (c) => {
-	return c.text("Hello Hono!");
-});
-
-export default app;
+export default {
+	port: AppConfig.APP_PORT,
+	fetch: app.fetch,
+};

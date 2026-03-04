@@ -17,7 +17,8 @@ const worker = new Worker<EmailOptions>(
 		}
 	},
 	{
-		connection: queueRedis,
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		connection: queueRedis as any,
 	},
 );
 

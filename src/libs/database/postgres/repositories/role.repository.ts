@@ -210,5 +210,12 @@ export function RoleRepository(tx?: TransactionClient) {
 				select: { id: true, name: true },
 			});
 		},
+
+		async getSelectOptions(): Promise<{ id: string; name: string }[]> {
+			return dbClient.role.findMany({
+				orderBy: { name: "asc" },
+				select: { id: true, name: true },
+			});
+		},
 	};
 }
