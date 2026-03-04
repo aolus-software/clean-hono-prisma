@@ -1,0 +1,68 @@
+{
+	"name": "clean-hono-prisma",
+	"scripts": {
+		"dev": "bun run --hot src/index.ts",
+		"build": "bun build ./src/index.ts --outdir=dist --target=node",
+		"start": "bun run ./src/index.ts",
+		"typecheck": "tsc --noEmit",
+		"lint": "bun run eslint . --ext .ts,.js",
+		"lint:fix": "bun run eslint . --ext .ts,.js --fix",
+		"format": "bun run prettier --write .",
+		"prepare": "husky",
+		"db:generate": "prisma generate",
+		"db:migrate": "prisma migrate dev",
+		"db:push": "prisma db push",
+		"db:pull": "prisma db pull",
+		"db:studio": "prisma studio",
+		"db:reset": "prisma migrate reset",
+		"db:seed": "bun run src/libs/database/seed/index.ts",
+		"db:clickhouse:migrate": "bun run src/libs/database/clickhouse/scripts/migrate.ts migrate",
+		"db:clickhouse:status": "bun run src/libs/database/clickhouse/scripts/migrate.ts status"
+	},
+	"dependencies": {
+		"@clickhouse/client": "^1.18.1",
+		"@hono/zod-openapi": "^1.2.2",
+		"@prisma/client": "^7.4.2",
+		"@scalar/hono-api-reference": "^0.9.48",
+		"bcryptjs": "^3.0.3",
+		"bullmq": "^5.70.1",
+		"crypto-js": "^4.2.0",
+		"dayjs": "^1.11.19",
+		"dotenv": "^17.3.1",
+		"envalid": "^8.1.1",
+		"hono": "^4.12.4",
+		"hono-pino": "^0.10.3",
+		"hono-rate-limiter": "^0.5.3",
+		"ioredis": "^5.10.0",
+		"nodemailer": "^8.0.1",
+		"pino": "^10.3.1",
+		"zod": "^4.3.6"
+	},
+	"devDependencies": {
+		"@eslint/js": "^10.0.1",
+		"@types/bcryptjs": "^3.0.0",
+		"@types/bun": "latest",
+		"@types/crypto-js": "^4.2.2",
+		"@types/node": "^25.3.3",
+		"@types/nodemailer": "^7.0.11",
+		"@typescript-eslint/eslint-plugin": "^8.56.1",
+		"@typescript-eslint/parser": "^8.56.1",
+		"eslint": "^10.0.2",
+		"eslint-config-prettier": "^10.1.8",
+		"eslint-plugin-import": "^2.32.0",
+		"eslint-plugin-prettier": "^5.5.5",
+		"eslint-plugin-simple-import-sort": "^12.1.1",
+		"globals": "^17.4.0",
+		"husky": "^9.1.7",
+		"lint-staged": "^16.3.2",
+		"prettier": "^3.8.1",
+		"prisma": "^7.4.2",
+		"typescript-eslint": "^8.56.1"
+	},
+	"lint-staged": {
+		"*.ts": [
+			"bun run lint:fix",
+			"bun run format"
+		]
+	}
+}
