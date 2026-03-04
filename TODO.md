@@ -31,15 +31,15 @@ Reference implementation: `../clean-hono/`
 
 - [x] `prisma/schema.prisma` — all models matching clean-hono's Drizzle schema
 - [x] `src/libs/database/postgres/client.ts` — Prisma client singleton
-- [ ] `src/libs/database/postgres/repositories/user.repository.ts`
-- [ ] `src/libs/database/postgres/repositories/role.repository.ts`
-- [ ] `src/libs/database/postgres/repositories/permission.repository.ts`
-- [ ] `src/libs/database/postgres/repositories/forgot-password.repository.ts`
-- [ ] `src/libs/database/postgres/repositories/index.ts`
+- [x] `src/libs/database/postgres/repositories/user.repository.ts`
+- [x] `src/libs/database/postgres/repositories/role.repository.ts`
+- [x] `src/libs/database/postgres/repositories/permission.repository.ts`
+- [x] `src/libs/database/postgres/repositories/forgot-password.repository.ts`
+- [x] `src/libs/database/postgres/repositories/index.ts`
 
 ### Database - index
 
-- [ ] `src/libs/database/index.ts` — re-export Prisma client, Redis, ClickHouse
+- [x] `src/libs/database/index.ts` — re-export Prisma client, Redis, ClickHouse
 
 ### Database - Seed
 
@@ -69,9 +69,9 @@ Reference implementation: `../clean-hono/`
 
 ## Phase 3 - Application Entry Points
 
-- [ ] `src/app.ts`
-- [ ] `src/bootstrap.ts`
-- [ ] `src/index.ts` (replace skeleton)
+- [x] `src/app.ts`
+- [x] `src/bootstrap.ts`
+- [x] `src/index.ts` (replace skeleton)
 
 ---
 
@@ -87,39 +87,39 @@ Reference implementation: `../clean-hono/`
 
 ### Copy as-is (no ORM imports)
 
-- [ ] `src/modules/index.ts`
-- [ ] `src/modules/home/routes.ts` _(fix: replace `db` import with Prisma client)_
-- [ ] `src/modules/auth/routes.ts`
-- [ ] `src/modules/auth/schema.ts`
-- [ ] `src/modules/auth/service.interface.ts`
-- [ ] `src/modules/profile/routes.ts`
-- [ ] `src/modules/profile/schema.ts`
-- [ ] `src/modules/profile/service.interface.ts`
-- [ ] `src/modules/settings/index.ts`
-- [ ] `src/modules/settings/permissions/routes.ts`
-- [ ] `src/modules/settings/permissions/schema.ts`
-- [ ] `src/modules/settings/permissions/service.interface.ts`
-- [ ] `src/modules/settings/roles/routes.ts`
-- [ ] `src/modules/settings/roles/schema.ts`
-- [ ] `src/modules/settings/roles/service.interface.ts`
-- [ ] `src/modules/settings/users/routes.ts`
-- [ ] `src/modules/settings/users/schema.ts`
-- [ ] `src/modules/settings/users/service.interface.ts`
-- [ ] `src/modules/settings/select-options/routes.ts`
-- [ ] `src/modules/settings/select-options/schema.ts`
-- [ ] `src/modules/settings/select-options/service.interface.ts`
+- [x] `src/modules/index.ts`
+- [x] `src/modules/home/routes.ts` _(fix: replace `db` import with Prisma client)_
+- [x] `src/modules/auth/routes.ts`
+- [x] `src/modules/auth/schema.ts`
+- [x] `src/modules/auth/service.interface.ts`
+- [x] `src/modules/profile/routes.ts`
+- [x] `src/modules/profile/schema.ts`
+- [x] `src/modules/profile/service.interface.ts`
+- [x] `src/modules/settings/index.ts`
+- [x] `src/modules/settings/permissions/routes.ts`
+- [x] `src/modules/settings/permissions/schema.ts`
+- [x] `src/modules/settings/permissions/service.interface.ts`
+- [x] `src/modules/settings/roles/routes.ts`
+- [x] `src/modules/settings/roles/schema.ts`
+- [x] `src/modules/settings/roles/service.interface.ts`
+- [x] `src/modules/settings/users/routes.ts`
+- [x] `src/modules/settings/users/schema.ts`
+- [x] `src/modules/settings/users/service.interface.ts`
+- [x] `src/modules/settings/select-options/routes.ts`
+- [x] `src/modules/settings/select-options/schema.ts`
+- [x] `src/modules/settings/select-options/service.interface.ts`
 
 ### Copy then fix import path (repo imports from `@database` → postgres repos path)
 
-- [ ] `src/modules/settings/permissions/services.ts`
-- [ ] `src/modules/settings/roles/services.ts`
-- [ ] `src/modules/settings/users/services.ts`
-- [ ] `src/modules/settings/select-options/services.ts`
+- [x] `src/modules/settings/permissions/services.ts`
+- [x] `src/modules/settings/roles/services.ts`
+- [x] `src/modules/settings/users/services.ts`
+- [x] `src/modules/settings/select-options/services.ts`
 
 ### Rewrite with Prisma (use clean-hono as reference for logic)
 
-- [ ] `src/modules/auth/service.ts` — replace `eq`/Drizzle queries with Prisma calls
-- [ ] `src/modules/profile/service.ts` — replace `db`, `usersTable`, `and/eq/isNull` with Prisma
+- [x] `src/modules/auth/service.ts` — replace `eq`/Drizzle queries with Prisma calls
+- [x] `src/modules/profile/service.ts` — replace `db`, `usersTable`, `and/eq/isNull` with Prisma
 
 ---
 
