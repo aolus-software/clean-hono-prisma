@@ -28,7 +28,9 @@ export const AuthMiddleware = async (
 	const cachekey = UserInformationCacheKey(payload.userId);
 	let user: UserInformation | null = await Cache.get<UserInformation>(cachekey);
 	if (!user) {
-		const userRecord = await UserRepository().findUserInformation(payload.userId);
+		const userRecord = await UserRepository().findUserInformation(
+			payload.userId,
+		);
 		if (!userRecord) {
 			throw new UnauthorizedError("User not found");
 		}

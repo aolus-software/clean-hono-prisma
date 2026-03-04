@@ -14,7 +14,11 @@ export class ProfileService implements IProfileService {
 	): Promise<UserInformation> {
 		await db.user.update({
 			where: { id: user.id, deleted_at: null },
-			data: { name: data.name, email: data.email, remark: data.remarks ?? null },
+			data: {
+				name: data.name,
+				email: data.email,
+				remark: data.remarks ?? null,
+			},
 		});
 		const updatedUser = await UserRepository().findUserInformation(user.id);
 		if (!updatedUser) {
@@ -36,7 +40,10 @@ export class ProfileService implements IProfileService {
 		if (!userData) {
 			throw new UnauthorizedError("User not found");
 		}
-		if ((await Hash.compareHash(data.current_password, userData.password)) === false) {
+		if (
+			(await Hash.compareHash(data.current_password, userData.password)) ===
+			false
+		) {
 			throw new UnprocessableEntityError("Current password is incorrect", [
 				{ current_password: ["Current password is incorrect"] },
 			]);
