@@ -22,6 +22,7 @@
 	"dependencies": {
 		"@clickhouse/client": "^1.18.1",
 		"@hono/zod-openapi": "^1.2.2",
+		"@prisma/adapter-pg": "^7.4.2",
 		"@prisma/client": "^7.4.2",
 		"@scalar/hono-api-reference": "^0.9.48",
 		"bcryptjs": "^3.0.3",
