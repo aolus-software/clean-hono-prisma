@@ -6,6 +6,7 @@ import { createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import { defaultHook } from "@errors";
 import { db, RedisClient, ClickHouseClientManager } from "@database";
+import { sendEmailQueue } from "@bull";
 
 const HomeRoutes = new OpenAPIHono({ defaultHook });
 
@@ -128,7 +129,7 @@ HomeRoutes.openapi(HealthRoute, async (c) => {
 	// Check Redis Queue
 	try {
 		const start = Date.now();
-		await RedisClient.getQueueRedisClient().ping();
+		await sendEmailQueue.waitUntilReady();
 		services.redisQueue = {
 			status: "healthy",
 			responseTime: Date.now() - start,
