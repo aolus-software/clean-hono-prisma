@@ -5,6 +5,7 @@
 		"build": "bun run typecheck && bun build ./src/index.ts --outdir=dist --target=bun --minify",
 		"build:binary": "bun run typecheck && bun build ./src/index.ts --compile --outfile=server",
 		"start": "bun run ./src/index.ts",
+		"start:cluster": "APP_CLUSTER_MODE=true bun run ./src/index.ts",
 		"typecheck": "tsc --noEmit",
 		"lint": "bun run eslint . --ext .ts,.js",
 		"lint:fix": "bun run eslint . --ext .ts,.js --fix",

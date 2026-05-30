@@ -1,10 +1,11 @@
 import { AppConfig } from "@config";
-import app from "./app";
 
-// eslint-disable-next-line no-console
-console.log(`Starting server on port ${AppConfig.APP_PORT}`);
+const isFollower = process.env.CLUSTER_WORKER_ID !== undefined;
 
-export default {
-	port: AppConfig.APP_PORT,
-	fetch: app.fetch,
-};
+if (AppConfig.APP_CLUSTER_MODE && !isFollower) {
+	await import("./cluster");
+} else {
+	await import("./server");
+}
+
+export {};

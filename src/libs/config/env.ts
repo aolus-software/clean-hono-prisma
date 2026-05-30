@@ -14,6 +14,10 @@ export const env = cleanEnv(process.env, {
 	APP_JWT_SECRET: str(),
 	APP_JWT_EXPIRES_IN: num({ default: 3600 }),
 
+	// Cluster
+	APP_CLUSTER_MODE: bool({ default: false }),
+	APP_CLUSTER_WORKERS: num({ default: 0 }),
+
 	// Database
 	DATABASE_URL: url(),
 

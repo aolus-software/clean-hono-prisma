@@ -17,6 +17,8 @@ export interface AppConfig {
 	APP_SECRET: string;
 	APP_JWT_SECRET: string;
 	APP_JWT_EXPIRES_IN: number;
+	APP_CLUSTER_MODE: boolean;
+	APP_CLUSTER_WORKERS: number;
 	LOG_LEVEL: LogLevel;
 	CLIENT_URL: URL;
 }
