@@ -17,6 +17,7 @@ export default tseslint.config(
 			"/packages/db/clickhouse/repositories/interfaces/*.ts",
 			".agents/**/*",
 			".claude/**/*",
+			"prisma/generated/**/*",
 		],
 	},
 	eslint.configs.recommended,
