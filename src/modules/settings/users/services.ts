@@ -3,7 +3,6 @@ import {
 	PaginationResponse,
 	UserList,
 	UserDetail,
-	UserCreate,
 } from "@types";
 import { UserRepository } from "@database";
 import { z } from "@hono/zod-openapi";
@@ -39,7 +38,7 @@ export class UserService implements IUserService {
 		await UserRepository().create({
 			...data,
 			password: hashedPassword,
-		} as UserCreate);
+		});
 	}
 
 	async findOne(id: string): Promise<UserDetail> {
