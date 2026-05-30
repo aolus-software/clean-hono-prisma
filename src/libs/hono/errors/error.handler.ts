@@ -7,6 +7,7 @@ import { Env } from "@types";
 import { DateToolkit, logger } from "@utils";
 import { AppConfig } from "@config";
 import { ERROR_CODES } from "./error-codes.constant";
+import { t } from "@i18n";
 
 /**
  * Standard error response format
@@ -27,7 +28,7 @@ export const registerException = (app: Hono<Env>) => {
 		return c.json(
 			{
 				success: false,
-				message: "Route not found",
+				message: t("errors.routeNotFound"),
 				code: ERROR_CODES.ROUTE_NOT_FOUND,
 				errors: [],
 				data: null,
@@ -60,7 +61,7 @@ export const registerException = (app: Hono<Env>) => {
 			return c.json(
 				{
 					success: false,
-					message: "Validation failed",
+					message: t("errors.validationFailed"),
 					code: ERROR_CODES.VALIDATION_ERROR,
 					errors: formatZodError(err),
 					data: null,
@@ -107,7 +108,7 @@ export const registerException = (app: Hono<Env>) => {
 				return c.json(
 					{
 						success: false,
-						message: "Route not found",
+						message: t("errors.routeNotFound"),
 						code: ERROR_CODES.ROUTE_NOT_FOUND,
 						errors: [],
 						data: null,
@@ -146,7 +147,7 @@ export const registerException = (app: Hono<Env>) => {
 		return c.json(
 			{
 				success: false,
-				message: "Internal server error",
+				message: t("errors.internalServerError"),
 				code: ERROR_CODES.INTERNAL_ERROR,
 				errors: [],
 				data: null,

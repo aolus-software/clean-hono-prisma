@@ -11,6 +11,7 @@ import {
 import { commonResponse } from "@hono-libs/schemas";
 import { ResponseToolkit } from "@utils";
 import { defaultHook } from "@errors";
+import { t } from "@i18n";
 // import { commonResponse } from "@toolkit/schemas";
 // import { ZodUserInformation } from "@packages/*";
 import { Env, ZodUserInformation } from "@types";
@@ -73,7 +74,7 @@ AuthRoutes.openapi(loginRoute, async (c) => {
 	return ResponseToolkit.success<z.infer<typeof loginDataSchema>, 200>(
 		c,
 		result,
-		"Login successful",
+		t("auth.loginSuccess"),
 		200,
 	);
 });
@@ -132,7 +133,7 @@ AuthRoutes.openapi(registerRoute, async (c) => {
 	return ResponseToolkit.success<null, 201>(
 		c,
 		null,
-		"Registration successful. Please check your email to verify your account.",
+		t("auth.registerSuccess"),
 		201,
 	);
 });
@@ -186,7 +187,7 @@ AuthRoutes.openapi(resendVerificationRoute, async (c) => {
 	return ResponseToolkit.success<null, 200>(
 		c,
 		null,
-		"Verification email sent successfully. Please check your inbox.",
+		t("auth.verificationEmailSent"),
 	);
 });
 
@@ -237,7 +238,7 @@ AuthRoutes.openapi(verifyEmailRoute, async (c) => {
 	return ResponseToolkit.success<null, 200>(
 		c,
 		null,
-		"Email verified successfully. You can now log in to your account.",
+		t("auth.emailVerified"),
 		200,
 	);
 });
@@ -287,7 +288,7 @@ AuthRoutes.openapi(forgotPasswordRoute, async (c) => {
 	return ResponseToolkit.success<null, 200>(
 		c,
 		null,
-		"If the email exists, a password reset link has been sent. Please check your inbox.",
+		t("auth.resetPasswordEmailSent"),
 		200,
 	);
 });
@@ -347,7 +348,7 @@ AuthRoutes.openapi(resetPasswordRoute, async (c) => {
 	return ResponseToolkit.success<null, 200>(
 		c,
 		null,
-		"Password reset successful. You can now log in with your new password.",
+		t("auth.passwordReset"),
 		200,
 	);
 });

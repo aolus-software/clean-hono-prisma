@@ -48,3 +48,5 @@ package-lock.json
 
 /storage/logs/*
 /prisma/generated/*
+
+skills-lock.json

@@ -9,6 +9,7 @@ import { Env, ZodDatatableSchema } from "@types";
 import { AuthMiddleware, GuardDescriptions, Guards } from "@hono-libs";
 import { commonResponse } from "@hono-libs/schemas";
 import { ResponseToolkit } from "@utils";
+import { t } from "@i18n";
 
 const RoleRoutes = new OpenAPIHono<Env>();
 
@@ -45,7 +46,7 @@ RoleRoutes.openapi(RoleGetRoute, async (c) => {
 	const roleService = c.get("roleService");
 	const roles = await roleService.findAll(queryParam);
 
-	return ResponseToolkit.success(c, roles, "Fetched roles successfully", 200);
+	return ResponseToolkit.success(c, roles, t("role.list"), 200);
 });
 
 RoleRoutes.use("/", Guards.roleManagement.list());
@@ -87,7 +88,7 @@ RoleRoutes.openapi(RoleCreateRoute, async (c) => {
 	const roleService = c.get("roleService");
 	await roleService.create(data);
 
-	return ResponseToolkit.created(c, {}, "Role created successfully");
+	return ResponseToolkit.created(c, {}, t("role.created"));
 });
 
 RoleRoutes.use("/", Guards.roleManagement.create());
@@ -125,7 +126,7 @@ RoleRoutes.openapi(RoleDetailRoute, async (c) => {
 	const roleService = c.get("roleService");
 	const role = await roleService.findOne(id);
 
-	return ResponseToolkit.success(c, role, "Fetched role successfully", 200);
+	return ResponseToolkit.success(c, role, t("role.detail"), 200);
 });
 
 RoleRoutes.use("/:id", Guards.roleManagement.detail());
@@ -171,7 +172,7 @@ RoleRoutes.openapi(RoleUpdateRoute, async (c) => {
 	const roleService = c.get("roleService");
 	await roleService.update(data, id);
 
-	return ResponseToolkit.success(c, {}, "Role updated successfully", 200);
+	return ResponseToolkit.success(c, {}, t("role.updated"), 200);
 });
 
 RoleRoutes.use("/:id", Guards.roleManagement.edit());
@@ -209,7 +210,7 @@ RoleRoutes.openapi(RoleDeleteRoute, async (c) => {
 	const roleService = c.get("roleService");
 	await roleService.delete(id);
 
-	return ResponseToolkit.success(c, {}, "Role deleted successfully", 200);
+	return ResponseToolkit.success(c, {}, t("role.deleted"), 200);
 });
 
 RoleRoutes.use("/:id", Guards.roleManagement.delete());

@@ -1,6 +1,7 @@
 import { createRoute, OpenAPIHono } from "@hono/zod-openapi";
 import { commonResponse } from "@hono-libs/schemas";
 import { ResponseToolkit } from "@utils";
+import { t } from "@i18n";
 
 import {
 	PermissionSelectOptionsResponseSchema,
@@ -44,12 +45,7 @@ SelectOptionsRoutes.openapi(PermissionSelectOptionsRoute, async (c) => {
 	const service = c.get("settingSelectOption");
 	const options = await service.getPermissionOptions();
 
-	return ResponseToolkit.success(
-		c,
-		options,
-		"Fetched permission options successfully",
-		200,
-	);
+	return ResponseToolkit.success(c, options, t("common.retrieved"), 200);
 });
 
 // -------------------
@@ -83,12 +79,7 @@ SelectOptionsRoutes.openapi(RoleSelectOptionsRoute, async (c) => {
 	const service = c.get("settingSelectOption");
 	const options = await service.getRoleOptions();
 
-	return ResponseToolkit.success(
-		c,
-		options,
-		"Fetched role options successfully",
-		200,
-	);
+	return ResponseToolkit.success(c, options, t("common.retrieved"), 200);
 });
 
 export default SelectOptionsRoutes;

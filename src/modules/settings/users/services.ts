@@ -10,6 +10,7 @@ import { z } from "@hono/zod-openapi";
 import { UserCreateSchema, UserUpdateSchema } from "./schema";
 import { IUserService } from "./service.interface";
 import { NotFoundError } from "@errors";
+import { t } from "@i18n";
 import { Hash } from "@utils";
 
 export class UserService implements IUserService {
@@ -43,7 +44,7 @@ export class UserService implements IUserService {
 
 	async findOne(id: string): Promise<UserDetail> {
 		const user = await UserRepository().findById(id);
-		if (!user) throw new NotFoundError("User not found");
+		if (!user) throw new NotFoundError(t("user.notFound"));
 		return user;
 	}
 

@@ -1,6 +1,7 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { commonResponse } from "@hono-libs/schemas";
 import { ResponseToolkit } from "@utils";
+import { t } from "@i18n";
 import {
 	PermissionCreateSchema,
 	PermissionDetailResponseSchema,
@@ -45,12 +46,7 @@ PermissionRoutes.openapi(PermissionGetRoute, async (c) => {
 	const permissionService = c.get("permissionService");
 	const permissions = await permissionService.findAll(queryParam);
 
-	return ResponseToolkit.success(
-		c,
-		permissions,
-		"Fetched permissions successfully",
-		200,
-	);
+	return ResponseToolkit.success(c, permissions, t("permission.list"), 200);
 });
 
 // -------------------
@@ -90,7 +86,7 @@ PermissionRoutes.openapi(PermissionCreateRoute, async (c) => {
 	const permissionService = c.get("permissionService");
 	await permissionService.create(data);
 
-	return ResponseToolkit.created(c, {}, "Permission created successfully");
+	return ResponseToolkit.created(c, {}, t("permission.created"));
 });
 
 // -------------------
@@ -130,12 +126,7 @@ PermissionRoutes.openapi(PermissionDetailRoute, async (c) => {
 	const permissionService = c.get("permissionService");
 	const permission = await permissionService.findOne(id);
 
-	return ResponseToolkit.success(
-		c,
-		permission,
-		"Fetched permission successfully",
-		200,
-	);
+	return ResponseToolkit.success(c, permission, t("permission.detail"), 200);
 });
 
 // -------------------
@@ -179,7 +170,7 @@ PermissionRoutes.openapi(PermissionUpdateRoute, async (c) => {
 	const permissionService = c.get("permissionService");
 	await permissionService.update(data, id);
 
-	return ResponseToolkit.success(c, {}, "Permission updated successfully", 200);
+	return ResponseToolkit.success(c, {}, t("permission.updated"), 200);
 });
 
 // -------------------
@@ -215,7 +206,7 @@ PermissionRoutes.openapi(PermissionDeleteRoute, async (c) => {
 	const permissionService = c.get("permissionService");
 	await permissionService.delete(id);
 
-	return ResponseToolkit.success(c, {}, "Permission deleted successfully", 200);
+	return ResponseToolkit.success(c, {}, t("permission.deleted"), 200);
 });
 
 export default PermissionRoutes;

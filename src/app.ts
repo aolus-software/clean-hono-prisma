@@ -6,6 +6,7 @@ import {
 	requestIdMiddleware,
 	loggerMiddleware,
 	performanceMiddleware,
+	localeMiddleware,
 	diMiddleware,
 	corsMiddleware,
 	securityHeadersMiddleware,
@@ -21,6 +22,7 @@ bootstrapServices();
 app.use("*", requestIdMiddleware);
 app.use("*", loggerMiddleware);
 app.use("*", performanceMiddleware);
+app.use("*", localeMiddleware);
 app.use("*", diMiddleware);
 app.use("*", bodyLimitMiddleware);
 app.use("*", corsMiddleware);

@@ -2,6 +2,7 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { AuthMiddleware, GuardDescriptions, Guards } from "@hono-libs";
 import { commonResponse } from "@hono-libs/schemas";
 import { ResponseToolkit } from "@utils";
+import { t } from "@i18n";
 import {
 	UserCreateSchema,
 	UserDetailResponseSchema,
@@ -45,7 +46,7 @@ UserRoutes.openapi(UserGetRoute, async (c) => {
 	const service = c.get("userService");
 	const users = await service.findAll(queryParam);
 
-	return ResponseToolkit.success(c, users, "Fetched users successfully", 200);
+	return ResponseToolkit.success(c, users, t("user.list"), 200);
 });
 
 UserRoutes.use("/", Guards.userManagement.list());
@@ -87,7 +88,7 @@ UserRoutes.openapi(UserCreateRoute, async (c) => {
 	const userService = c.get("userService");
 	await userService.create(data);
 
-	return ResponseToolkit.created(c, {}, "User created successfully");
+	return ResponseToolkit.created(c, {}, t("user.created"));
 });
 
 UserRoutes.use("/", Guards.userManagement.create());
@@ -125,7 +126,7 @@ UserRoutes.openapi(UserDetailRoute, async (c) => {
 	const service = c.get("userService");
 	const user = await service.findOne(id);
 
-	return ResponseToolkit.success(c, user, "Fetched user successfully", 200);
+	return ResponseToolkit.success(c, user, t("user.detail"), 200);
 });
 
 UserRoutes.use("/:id", Guards.userManagement.detail());
@@ -171,7 +172,7 @@ UserRoutes.openapi(UserUpdateRoute, async (c) => {
 	const service = c.get("userService");
 	await service.update(data, id);
 
-	return ResponseToolkit.success(c, {}, "User updated successfully", 200);
+	return ResponseToolkit.success(c, {}, t("user.updated"), 200);
 });
 
 UserRoutes.use("/:id", Guards.userManagement.edit());
@@ -209,7 +210,7 @@ UserRoutes.openapi(UserDeleteRoute, async (c) => {
 	const service = c.get("userService");
 	await service.delete(id);
 
-	return ResponseToolkit.success(c, {}, "User deleted successfully", 200);
+	return ResponseToolkit.success(c, {}, t("user.deleted"), 200);
 });
 
 UserRoutes.use("/:id", Guards.userManagement.delete());

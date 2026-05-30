@@ -4,6 +4,7 @@ import { z } from "@hono/zod-openapi";
 import { PermissionCreateSchema, PermissionUpdateSchema } from "./schema";
 import { NotFoundError } from "@errors";
 import { IPermissionService } from "./service.interface";
+import { t } from "@i18n";
 
 export class PermissionService implements IPermissionService {
 	async findAll(
@@ -45,7 +46,7 @@ export class PermissionService implements IPermissionService {
 				updated_at: true,
 			},
 		});
-		if (!perm) throw new NotFoundError("Permission not found");
+		if (!perm) throw new NotFoundError(t("permission.notFound"));
 		return perm;
 	}
 

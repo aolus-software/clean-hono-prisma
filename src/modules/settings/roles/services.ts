@@ -9,6 +9,7 @@ import { z } from "@hono/zod-openapi";
 import { RoleCreateSchema, RoleUpdateSchema } from "./schema";
 import { IRoleService } from "./service.interface";
 import { NotFoundError } from "@errors";
+import { t } from "@i18n";
 
 export class RoleService implements IRoleService {
 	async findAll(
@@ -40,7 +41,7 @@ export class RoleService implements IRoleService {
 
 	async findOne(id: string): Promise<RoleDetail> {
 		const role = await RoleRepository().findById(id);
-		if (!role) throw new NotFoundError("Role not found");
+		if (!role) throw new NotFoundError(t("role.notFound"));
 		return role;
 	}
 

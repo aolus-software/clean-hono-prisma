@@ -4,6 +4,7 @@ import { JWTToolkit } from "@utils";
 import { Context } from "hono";
 import { UserInformation, Env } from "@types";
 import { UserRepository } from "@database";
+import { t } from "@i18n";
 
 export const AuthMiddleware = async (
 	c: Context<Env>,
@@ -15,14 +16,14 @@ export const AuthMiddleware = async (
 		: authHeader;
 
 	if (!token) {
-		throw new UnauthorizedError("No token provided");
+		throw new UnauthorizedError(t("auth.noTokenProvided"));
 	}
 
 	const payload = await new JWTToolkit().verify<{
 		userId: string;
 	}>(token);
 	if (!payload?.userId) {
-		throw new UnauthorizedError("Invalid token payload");
+		throw new UnauthorizedError(t("auth.invalidTokenPayload"));
 	}
 
 	const cachekey = UserInformationCacheKey(payload.userId);
@@ -32,7 +33,7 @@ export const AuthMiddleware = async (
 			payload.userId,
 		);
 		if (!userRecord) {
-			throw new UnauthorizedError("User not found");
+			throw new UnauthorizedError(t("auth.userNotFound"));
 		}
 
 		user = userRecord;
