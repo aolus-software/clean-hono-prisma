@@ -1,189 +1,117 @@
-import { OpenAPIHono } from "@hono/zod-openapi";
-import { commonResponse, createErrorResponse } from "@hono-libs/schemas";
-import { ResponseToolkit, DateToolkit } from "@utils";
+import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { AppConfig } from "@config";
-import { createRoute } from "@hono/zod-openapi";
-import { z } from "zod";
+import { db, RedisClient } from "@database";
 import { defaultHook } from "@errors";
-import { db, RedisClient, ClickHouseClientManager } from "@database";
-import { sendEmailQueue } from "@bull";
+import { commonResponse, successSchema } from "@hono-libs/schemas";
+import { t } from "@i18n";
+import { Env } from "@types";
+import { DateToolkit, ResponseToolkit } from "@utils";
 
-const HomeRoutes = new OpenAPIHono({ defaultHook });
+const HomeRoutes = new OpenAPIHono<Env>({ defaultHook });
+
+const HealthSchema = z
+	.object({
+		status: z.enum(["healthy", "unhealthy"]),
+		timestamp: z.string(),
+		services: z.object({
+			database: z.enum(["healthy", "unhealthy"]),
+			redis: z.enum(["healthy", "unhealthy"]),
+		}),
+	})
+	.openapi("Health");
 
 const HomeRoute = createRoute({
 	method: "get",
 	path: "/",
 	tags: ["Home"],
-	responses: {
-		...commonResponse(
-			z.object({
-				app: z.string(),
-			}),
-			"Welcome to the API",
-			{ exclude: [201, 422, 402, 404, 403] },
-		),
-	},
+	summary: "API root",
+	description: "Application name, environment and server time.",
+	responses: commonResponse(
+		z.object({ appName: z.string(), appEnv: z.string(), date: z.string() }),
+		"API information",
+		{ include: [200, 429, 500] },
+	),
 });
 
-HomeRoutes.openapi(HomeRoute, (c) => {
-	return ResponseToolkit.success(
+HomeRoutes.openapi(HomeRoute, (c) =>
+	ResponseToolkit.success(
 		c,
 		{
-			app: AppConfig.APP_NAME,
+			appName: AppConfig.APP_NAME,
+			appEnv: AppConfig.APP_ENV,
+			date: DateToolkit.getDateTimeInformativeWithTimezone(DateToolkit.now()),
 		},
-		"Welcome to the API",
+		t("home.welcome", { name: AppConfig.APP_NAME }),
 		200,
-	);
-});
+	),
+);
 
 const HealthRoute = createRoute({
 	method: "get",
 	path: "/health",
 	tags: ["Home"],
+	summary: "Health check",
+	description:
+		"Probes PostgreSQL and Redis. 503 with the same body when either fails.",
 	responses: {
 		200: {
 			content: {
-				"application/json": {
-					schema: z.object({
-						success: z.boolean().openapi({ example: true }),
-						message: z.string().openapi({ example: "Service is healthy" }),
-						data: z.object({
-							status: z.string().openapi({ example: "healthy" }),
-							timestamp: z.string(),
-							services: z.object({
-								database: z.object({
-									status: z.string(),
-									responseTime: z.number().optional(),
-								}),
-								redis: z.object({
-									status: z.string(),
-									responseTime: z.number().optional(),
-								}),
-								redisQueue: z.object({
-									status: z.string(),
-									responseTime: z.number().optional(),
-								}),
-								clickhouse: z.object({
-									status: z.string(),
-									responseTime: z.number().optional(),
-								}),
-							}),
-						}),
-					}),
-				},
+				"application/json": { schema: successSchema(HealthSchema, 200) },
 			},
-			description: "Service is healthy",
+			description: "Every dependency is healthy",
 		},
-		503: createErrorResponse(
-			"Service is unhealthy",
-			"Service is unhealthy",
-			false,
-		),
+		503: {
+			content: {
+				"application/json": { schema: successSchema(HealthSchema, 503) },
+			},
+			description: "A dependency is unhealthy",
+		},
 	},
 });
 
+const probe = async (check: () => Promise<unknown>) => {
+	try {
+		await check();
+		return "healthy" as const;
+	} catch {
+		return "unhealthy" as const;
+	}
+};
+
 HomeRoutes.openapi(HealthRoute, async (c) => {
-	const services = {
-		database: {
-			status: "unhealthy",
-			responseTime: undefined as number | undefined,
-		},
-		redis: {
-			status: "unhealthy",
-			responseTime: undefined as number | undefined,
-		},
-		redisQueue: {
-			status: "unhealthy",
-			responseTime: undefined as number | undefined,
-		},
-		clickhouse: {
-			status: "unhealthy",
-			responseTime: undefined as number | undefined,
-		},
+	const [database, redis] = await Promise.all([
+		probe(() => db.$queryRaw`SELECT 1`),
+		probe(() => RedisClient.getRedisClient().ping()),
+	]);
+	const healthy = database === "healthy" && redis === "healthy";
+	const data = {
+		status: healthy ? ("healthy" as const) : ("unhealthy" as const),
+		timestamp: DateToolkit.getDateTimeInformativeWithTimezone(
+			DateToolkit.now(),
+		),
+		services: { database, redis },
 	};
 
-	// Check Database
-	try {
-		const start = Date.now();
-		await db.$queryRaw`SELECT 1`;
-		services.database = {
-			status: "healthy",
-			responseTime: Date.now() - start,
-		};
-	} catch {
-		// Database remains unhealthy
+	if (healthy) {
+		return ResponseToolkit.success(c, data, t("home.healthy"), 200);
 	}
-
-	// Check Redis
-	try {
-		const start = Date.now();
-		await RedisClient.getRedisClient().ping();
-		services.redis = {
-			status: "healthy",
-			responseTime: Date.now() - start,
-		};
-	} catch {
-		// Redis remains unhealthy
-	}
-
-	// Check Redis Queue
-	try {
-		const start = Date.now();
-		await sendEmailQueue.waitUntilReady();
-		services.redisQueue = {
-			status: "healthy",
-			responseTime: Date.now() - start,
-		};
-	} catch {
-		// Redis Queue remains unhealthy
-	}
-
-	// Check ClickHouse
-	try {
-		const start = Date.now();
-		await ClickHouseClientManager.getInstance().ping();
-		services.clickhouse = {
-			status: "healthy",
-			responseTime: Date.now() - start,
-		};
-	} catch {
-		// ClickHouse remains unhealthy
-	}
-
-	// Determine overall health status
-	const allHealthy = Object.values(services).every(
-		(service) => service.status === "healthy",
-	);
-
-	if (!allHealthy) {
-		const unhealthyData = {
-			status: "unhealthy",
-			timestamp: DateToolkit.getDateTimeInformativeWithTimezone(
-				DateToolkit.now(),
-			),
-			services,
-		};
-		return ResponseToolkit.custom(
-			c,
-			false,
-			unhealthyData,
-			"One or more services are unhealthy",
-			503,
-		);
-	}
-
-	return ResponseToolkit.success(
-		c,
-		{
-			status: "healthy",
-			timestamp: DateToolkit.getDateTimeInformativeWithTimezone(
-				DateToolkit.now(),
-			),
-			services,
-		},
-		"Service is healthy",
-		200,
-	);
+	return ResponseToolkit.success(c, data, t("home.unhealthy"), 503);
 });
+
+const LiveRoute = createRoute({
+	method: "get",
+	path: "/live",
+	tags: ["Home"],
+	summary: "Liveness",
+	description:
+		"Answers as long as the process serves requests. No dependency checks.",
+	responses: commonResponse(z.object({ alive: z.literal(true) }), "Alive", {
+		include: [200],
+	}),
+});
+
+HomeRoutes.openapi(LiveRoute, (c) =>
+	ResponseToolkit.success(c, { alive: true as const }, t("home.alive"), 200),
+);
 
 export default HomeRoutes;

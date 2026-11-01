@@ -1,40 +1,43 @@
 # Clean Hono Prisma
 
-A clean architecture backend API built with Hono, TypeScript, Bun, and Prisma ORM.
+A clean-architecture backend API starter built with Hono, TypeScript, Bun, and Prisma. It ships
+authentication (with refresh tokens) and a settings domain — users, roles, permissions — guarded by
+RBAC.
 
 ## Features
 
-- Clean architecture pattern with separation of concerns
-- Hono web framework with Zod OpenAPI integration
-- PostgreSQL with Prisma ORM
-- Redis for caching and rate limiting
-- BullMQ for background job processing
-- ClickHouse for analytics (optional)
-- Comprehensive authentication and authorization (RBAC)
-- API documentation with Scalar
-- Docker support
+- Route → service → repository layering, with services resolved from a small DI container
+- Hono 4 with `@hono/zod-openapi`: one route definition drives validation and the OpenAPI spec
+- PostgreSQL with Prisma 7 (`@prisma/adapter-pg`)
+- JWT access (1 day) and refresh (7 days) tokens with separate secrets
+- RBAC with per-route permission and role guards; 15 seeded permissions
+- Redis-cached user information, invalidated on every access-changing write
+- Paginated lists with allow-listed sort and `filter[<key>]` parameters
+- BullMQ queued mail with English and Indonesian templates; `en` / `id` i18n
+- Rate limiting, CORS, security headers, body limit
+- Scalar API docs behind `ENABLE_API_DOCS`
+- Optional ClickHouse; optional cluster mode
+- Multi-stage Dockerfile and compose stack
 
 ## Tech Stack
 
 - **Runtime**: Bun
-- **Framework**: Hono
-- **Language**: TypeScript
-- **Databases**: PostgreSQL, Redis, ClickHouse
+- **Framework**: Hono + `@hono/zod-openapi`
+- **Language**: TypeScript (strict)
+- **Databases**: PostgreSQL, Redis, ClickHouse (optional)
 - **ORM**: Prisma
 - **Queue**: BullMQ
 - **Validation**: Zod
-- **API Docs**: Zod OpenAPI + Scalar
+- **API Docs**: Scalar
 
 ## Prerequisites
 
-- Bun 1.x or higher
+- Bun 1.3 or higher
 - PostgreSQL
 - Redis
 - Docker (optional)
 
 ## Installation
-
-Install dependencies:
 
 ```sh
 bun install
@@ -42,214 +45,191 @@ bun install
 
 ## Configuration
 
-Copy the example environment file and configure your environment variables:
-
 ```sh
 cp .env.example .env
 ```
 
-Configure the following environment variables:
-
-- Database connections (PostgreSQL, Redis, ClickHouse)
-- Mail settings
-- JWT secrets
-- Application settings
+Replace `JWT_SECRET` and `JWT_REFRESH_SECRET` (both required, `openssl rand -base64 48`). Every other
+value in `.env.example` works as-is for local development. See
+[docs/CONFIGURATION.md](./docs/CONFIGURATION.md) for every variable.
 
 ## Database Setup
 
-Generate the Prisma client:
-
 ```sh
-bun run db:generate
+docker compose up -d postgres redis   # or point DATABASE_URL / REDIS_* at your own
+make db-generate                      # generate the Prisma client into prisma/generated
+make db-migrate                       # apply migrations
+make db-seed                          # permissions, roles, and two users
 ```
 
-Run PostgreSQL migrations:
+Seeded accounts (change or remove them before any public deployment):
 
-```sh
-bun run db:migrate
-```
+| Email                   | Role        | Password          |
+| ----------------------- | ----------- | ----------------- |
+| `superuser@example.com` | `superuser` | `S3crEtP4ssw0rd!` |
+| `admin@example.com`     | `admin`     | `S3crEtP4ssw0rd!` |
 
-Seed the database with initial data:
-
-```sh
-bun run db:seed
-```
-
-For development, push schema directly without creating a migration:
-
-```sh
-bun run db:push
-```
-
-Open Prisma Studio to view and edit data:
-
-```sh
-bun run db:studio
-```
-
-Run ClickHouse migrations:
-
-```sh
-bun run db:clickhouse:migrate
-```
-
-Check ClickHouse migration status:
-
-```sh
-bun run db:clickhouse:status
-```
+The seeder is idempotent. Schema changes: edit `prisma/schema.prisma`, then `make db-migrate-dev`.
 
 ## Development
 
-Run the API server in development mode with hot reload:
-
 ```sh
-bun run dev
+make dev
 ```
 
-The API will be available at http://localhost:8001
+The API listens on `http://localhost:3000`.
 
 ## Production
 
-Build the application:
-
 ```sh
-bun run build
+bun run build    # typecheck + bundle to dist/
+bun run start    # bun run dist/index.js
 ```
 
-Start the production server:
-
-```sh
-bun run start
-```
+Set `APP_CLUSTER_MODE=true` to run one worker per CPU core. See
+[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md).
 
 ## Docker
 
-Build and run with Docker Compose:
-
 ```sh
-docker-compose up -d
+make docker-up        # postgres, redis, clickhouse, app
+make docker-migrate
+make docker-seed
 ```
+
+Inside compose, use service hostnames in `.env` (`@postgres:5432`, `REDIS_HOST=redis`).
 
 ## Project Structure
 
 ```
+prisma/
+├── schema.prisma            # models (Prisma default names)
+└── migrations/
 src/
-├── app.ts                 # Application setup
-├── bootstrap.ts           # DI container registrations
-├── index.ts               # Entry point
-├── bull/                  # Background jobs
-│   ├── queue/            # Job queues
-│   └── worker/           # Job workers
-├── libs/                  # Shared libraries
-│   ├── cache/            # Cache utilities
-│   ├── config/           # Configuration
-│   ├── database/         # Database clients and repositories
-│   │   ├── clickhouse/  # ClickHouse client and repositories
-│   │   ├── postgres/    # Prisma client and repositories
-│   │   └── redis/       # Redis client
-│   ├── hono/             # Hono framework utilities
-│   ├── mail/             # Email service
-│   ├── types/            # TypeScript types
-│   └── utils/            # Utility functions
-└── modules/               # Feature modules
-    ├── auth/             # Authentication
-    ├── home/             # Health check
-    ├── profile/          # User profile
-    └── settings/         # Application settings
-        ├── permissions/  # Permission management
-        ├── roles/        # Role management
-        ├── select-options/ # Dropdown options
-        └── users/        # User management
+├── index.ts                 # entry: cluster primary or server
+├── cluster.ts               # spawns workers sharing the port
+├── server.ts                # Bun.serve + BullMQ worker
+├── app.ts                   # global middleware, error handler, routes
+├── bootstrap.ts             # DI container registrations
+├── bull/                    # BullMQ queues and workers
+├── libs/
+│   ├── cache/               # Redis cache + keys
+│   ├── config/              # envalid env + config objects
+│   ├── database/
+│   │   ├── postgres/        # Prisma client + repositories
+│   │   ├── seed/            # seeders
+│   │   ├── redis/
+│   │   └── clickhouse/
+│   ├── default/             # constants, token lifetimes
+│   ├── hono/                # middlewares, guards, errors, schemas, DI container
+│   ├── i18n/                # en / id catalogs
+│   ├── mail/                # mail service + templates
+│   ├── types/
+│   └── utils/
+└── modules/
+    ├── auth/
+    ├── home/
+    ├── profile/
+    └── settings/
+        ├── permissions/
+        ├── roles/
+        ├── select-options/
+        └── users/
 ```
 
 ## Code Quality
 
-Run linting:
-
 ```sh
 bun run lint
-```
-
-Fix linting issues:
-
-```sh
 bun run lint:fix
-```
-
-Format code:
-
-```sh
 bun run format
-```
-
-Type check:
-
-```sh
+bun run format:check
 bun run typecheck
 ```
 
+There is no test runner configured yet.
+
 ## API Documentation
 
-Once the server is running, access the API documentation at:
-
-```
-http://localhost:8001/docs
-```
+With `ENABLE_API_DOCS=true` (on in `.env.example`), the Scalar UI is at `http://localhost:3000/docs`
+and the spec at `/docs/openapi.json`. The route map, envelope, and list-query rules are in
+[docs/API_DOCUMENTATION.md](./docs/API_DOCUMENTATION.md).
 
 ## Scripts
 
 ### Development
 
-- `bun run dev` - Run API server with hot reload
+- `bun run dev` — hot-reload dev server
+- `bun run i18n:keys` — regenerate translation key types
 
 ### Build & Production
 
-- `bun run build` - Build the application
-- `bun run start` - Start in production mode
+- `bun run build` — typecheck and bundle to `dist/` (mail templates copied to `dist/templates`)
+- `bun run build:binary` — compile a standalone `server` binary
+- `bun run start` — run `dist/index.js`
+- `bun run start:cluster` — run `dist/index.js` in cluster mode
 
 ### Code Quality
 
-- `bun run lint` - Run ESLint
-- `bun run lint:fix` - Fix ESLint issues
-- `bun run format` - Format code with Prettier
+- `bun run lint` / `bun run lint:fix`
+- `bun run format` / `bun run format:check`
+- `bun run typecheck`
 
 ### Database (PostgreSQL/Prisma)
 
-- `bun run db:generate` - Generate Prisma client
-- `bun run db:migrate` - Create and apply migrations
-- `bun run db:push` - Push schema to database (development only)
-- `bun run db:pull` - Introspect database into schema
-- `bun run db:studio` - Open Prisma Studio
-- `bun run db:reset` - Reset database (dangerous!)
-- `bun run db:seed` - Seed database with initial data
+- `bun run db:generate` — `prisma generate`
+- `bun run db:migrate` — `prisma migrate deploy`
+- `bun run db:migrate:dev` — `prisma migrate dev`
+- `bun run db:push` — `prisma db push` (dev only)
+- `bun run db:pull` — `prisma db pull`
+- `bun run db:studio` — `prisma studio`
+- `bun run db:drop` — `prisma migrate reset --force` (destructive)
+- `bun run db:seed` — run the seeders
 
 ### Database (ClickHouse)
 
-- `bun run db:clickhouse:migrate` - Run ClickHouse migrations
-- `bun run db:clickhouse:status` - Check migration status
+- `bun run db:clickhouse:migrate`
+- `bun run db:clickhouse:status`
 
 ### Makefile Commands
 
-You can also use `make` commands:
-
-- `make help` - Show all available commands
-- `make dev` - Start development server
-- `make fresh` - Reset, push schema, and seed (development)
-- `make reset` - Migrate and seed
-
-## Roadmap & Improvements
-
-See [TODO.md](./TODO.md) for a comprehensive list of planned improvements and enhancements.
+| Target                  | Does                                            |
+| ----------------------- | ----------------------------------------------- |
+| `help`                  | list targets                                    |
+| `install`               | `bun install`                                   |
+| `dev`                   | dev server                                      |
+| `build`                 | typecheck + bundle                              |
+| `start`                 | run the bundle                                  |
+| `lint` / `lint-fix`     | ESLint                                          |
+| `format`                | Prettier                                        |
+| `typecheck`             | `tsc --noEmit`                                  |
+| `db-generate`           | `prisma generate`                               |
+| `db-migrate`            | `prisma migrate deploy`                         |
+| `db-migrate-dev`        | `prisma migrate dev` + generate                 |
+| `db-push`               | `prisma db push`                                |
+| `db-pull`               | `prisma db pull`                                |
+| `db-studio`             | `prisma studio`                                 |
+| `db-drop`               | `prisma migrate reset --force`                  |
+| `db-seed`               | seed                                            |
+| `db-clickhouse-migrate` | ClickHouse migrations                           |
+| `db-clickhouse-status`  | ClickHouse migration status                     |
+| `fresh`                 | `db-drop` + `db-push` + `db-seed` (destructive) |
+| `reset`                 | `db-generate` + `db-migrate` + `db-seed`        |
+| `docker-build`          | compose images + migrator image                 |
+| `docker-up`             | `docker compose up -d --build`                  |
+| `docker-down`           | `docker compose down`                           |
+| `docker-restart`        | restart the app container                       |
+| `docker-logs`           | tail app logs                                   |
+| `docker-ps`             | stack status                                    |
+| `docker-migrate`        | migrate on the compose network                  |
+| `docker-seed`           | seed on the compose network                     |
+| `docker-deploy`         | git pull + up + migrate                         |
 
 ## Contributing
 
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+See [.github/CONTRIBUTING.md](./.github/CONTRIBUTING.md). Security reports go through
+[.github/SECURITY.md](./.github/SECURITY.md).
 
 ## License
 
-This project is licensed under the MIT License.
+MIT — see [LICENSE](./LICENSE).

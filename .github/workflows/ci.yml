@@ -7,7 +7,7 @@ on:
     branches: [main, develop]
 
 env:
-  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/elysia_db_test
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hono_clean_test
 
 jobs:
   lint:
@@ -32,7 +32,7 @@ jobs:
         run: bun run lint
 
       - name: Check formatting
-        run: bunx --bun prettier --check .
+        run: bun run format:check
 
   type-check:
     name: Type Check
@@ -53,7 +53,7 @@ jobs:
         run: bunx --bun prisma generate
 
       - name: Run TypeScript compiler
-        run: bunx --bun tsc --noEmit
+        run: bun run typecheck
 
   database:
     name: Database Check
@@ -65,7 +65,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: elysia_db_test
+          POSTGRES_DB: hono_clean_test
         ports:
           - 5432:5432
         options: >-
@@ -103,15 +103,15 @@ jobs:
       - name: Apply migrations
         run: bunx --bun prisma migrate deploy
 
-      # - name: Detect migration drift
-      #   run: |
-      #     bunx --bun prisma migrate diff \
-      #       --from-url "$DATABASE_URL" \
-      #       --to-schema-datamodel ./prisma/schema.prisma \
-      #       --exit-code || {
-      #         echo "Error: prisma/schema.prisma is ahead of prisma/migrations. Run 'make db-migrate-dev' and commit the generated migration."
-      #         exit 1
-      #       }
+      - name: Detect migration drift
+        run: |
+          bunx --bun prisma migrate diff \
+            --from-config-datasource \
+            --to-schema prisma/schema.prisma \
+            --exit-code || {
+              echo "Error: prisma/schema.prisma and prisma/migrations disagree. Run 'make db-migrate-dev' and commit the generated migration."
+              exit 1
+            }
 
   build:
     name: Build

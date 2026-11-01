@@ -26,8 +26,8 @@ app.use("*", localeMiddleware);
 app.use("*", diMiddleware);
 app.use("*", bodyLimitMiddleware);
 app.use("*", corsMiddleware);
-app.use(securityHeadersMiddleware);
-app.use(rateLimiterMiddleware);
+app.use("*", securityHeadersMiddleware);
+app.use("*", rateLimiterMiddleware);
 
 registerException(app);
 

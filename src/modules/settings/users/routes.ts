@@ -1,218 +1,225 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { AuthMiddleware, GuardDescriptions, Guards } from "@hono-libs";
-import { commonResponse } from "@hono-libs/schemas";
-import { ResponseToolkit } from "@utils";
+import { defaultHook } from "@errors";
+import { permissionGuard, roleGuard, withGuardDescription } from "@guards";
+import { AuthMiddleware } from "@hono-libs/middlewares/security/auth.middleware";
+import { commonResponse, IdParamSchema } from "@hono-libs/schemas";
 import { t } from "@i18n";
+import { Env } from "@types";
+import { DatatableToolkit, ResponseToolkit } from "@utils";
+
 import {
 	UserCreateSchema,
-	UserDetailResponseSchema,
+	UserDetailSchema,
 	UserListResponseSchema,
+	UserQuerySchema,
+	UserResetPasswordSchema,
 	UserUpdateSchema,
 } from "./schema";
-import { Env, ZodDatatableSchema } from "@types";
 
-const UserRoutes = new OpenAPIHono<Env>();
+const UserRoutes = new OpenAPIHono<Env>({ defaultHook });
 
-UserRoutes.use(AuthMiddleware);
+const tags = ["Settings/Users"];
+const security = [{ Bearer: [] }];
 
-// -------------------
-// GET /settings/users
-// -------------------
-const UserGetRoute = createRoute({
+const UserListRoute = createRoute({
 	method: "get",
-	path: "/",
-	tags: ["Settings/Users"],
-	security: [{ Bearer: [] }],
-	request: {
-		query: ZodDatatableSchema,
-	},
-	responses: {
-		200: {
-			content: {
-				"application/json": {
-					schema: UserListResponseSchema,
-				},
-			},
-			description: GuardDescriptions.userManagement.list(),
-		},
-		...commonResponse(UserListResponseSchema, "UserGetResponse", {
-			exclude: [200, 201],
-		}),
-	},
+	path: "",
+	tags,
+	security,
+	summary: "List users",
+	description: withGuardDescription(
+		"Paginated live users. Search matches name, email and status.",
+		{ permissions: ["user list"] },
+	),
+	middleware: [AuthMiddleware, permissionGuard(["user list"])] as const,
+	request: { query: UserQuerySchema },
+	responses: commonResponse(UserListResponseSchema, "Users", {
+		include: [200, 400, 401, 403, 422, 429, 500],
+	}),
 });
 
-UserRoutes.openapi(UserGetRoute, async (c) => {
-	const queryParam = c.req.valid("query");
-	const service = c.get("userService");
-	const users = await service.findAll(queryParam);
-
+UserRoutes.openapi(UserListRoute, async (c) => {
+	const query = DatatableToolkit.parseFilter(c, c.req.valid("query"));
+	const users = await c.get("userService").findAll(query);
 	return ResponseToolkit.success(c, users, t("user.list"), 200);
 });
 
-UserRoutes.use("/", Guards.userManagement.list());
-
-// -------------------
-// POST /settings/users
-// -------------------
 const UserCreateRoute = createRoute({
 	method: "post",
-	path: "/",
-	tags: ["Settings/Users"],
-	security: [{ Bearer: [] }],
+	path: "",
+	tags,
+	security,
+	summary: "Create user",
+	description: withGuardDescription(
+		"Create a user with roles. An email used by a live account, or an unknown role id, is 422.",
+		{ permissions: ["user create"] },
+	),
+	middleware: [AuthMiddleware, permissionGuard(["user create"])] as const,
 	request: {
 		body: {
-			content: {
-				"application/json": {
-					schema: UserCreateSchema,
-				},
-			},
+			content: { "application/json": { schema: UserCreateSchema } },
+			required: true,
 		},
 	},
-	responses: {
-		201: {
-			content: {
-				"application/json": {
-					schema: z.object({}),
-				},
-			},
-			description: GuardDescriptions.userManagement.create(),
-		},
-		...commonResponse(z.object({}), "UserCreateResponse", {
-			exclude: [200, 201],
-		}),
-	},
+	responses: commonResponse(z.null(), "User created", {
+		include: [201, 401, 403, 422, 429, 500],
+	}),
 });
 
 UserRoutes.openapi(UserCreateRoute, async (c) => {
-	const data = c.req.valid("json");
-	const userService = c.get("userService");
-	await userService.create(data);
-
-	return ResponseToolkit.created(c, {}, t("user.created"));
+	await c.get("userService").create(c.req.valid("json"));
+	return ResponseToolkit.success(c, null, t("user.created"), 201);
 });
 
-UserRoutes.use("/", Guards.userManagement.create());
-
-// -------------------
-// GET /settings/users/:id
-// -------------------
 const UserDetailRoute = createRoute({
 	method: "get",
 	path: "/{id}",
-	tags: ["Settings/Users"],
-	security: [{ Bearer: [] }],
-	request: {
-		params: z.object({
-			id: z.string().uuid(),
-		}),
-	},
-	responses: {
-		200: {
-			content: {
-				"application/json": {
-					schema: UserDetailResponseSchema,
-				},
-			},
-			description: GuardDescriptions.userManagement.detail(),
-		},
-		...commonResponse(UserDetailResponseSchema, "UserDetailResponse", {
-			exclude: [200, 201],
-		}),
-	},
+	tags,
+	security,
+	summary: "User detail",
+	description: withGuardDescription("One live user with roles.", {
+		permissions: ["user detail"],
+	}),
+	middleware: [AuthMiddleware, permissionGuard(["user detail"])] as const,
+	request: { params: IdParamSchema },
+	responses: commonResponse(UserDetailSchema, "User", {
+		include: [200, 401, 403, 404, 422, 429, 500],
+	}),
 });
 
 UserRoutes.openapi(UserDetailRoute, async (c) => {
-	const { id } = c.req.valid("param");
-	const service = c.get("userService");
-	const user = await service.findOne(id);
-
+	const user = await c.get("userService").findOne(c.req.valid("param").id);
 	return ResponseToolkit.success(c, user, t("user.detail"), 200);
 });
 
-UserRoutes.use("/:id", Guards.userManagement.detail());
-
-// -------------------
-// PUT /settings/users/:id
-// -------------------
 const UserUpdateRoute = createRoute({
-	method: "put",
+	method: "patch",
 	path: "/{id}",
-	tags: ["Settings/Users"],
-	security: [{ Bearer: [] }],
+	tags,
+	security,
+	summary: "Update user",
+	description: withGuardDescription(
+		"Full replace of name, email, status, remark and roles. No password.",
+		{ permissions: ["user edit"] },
+	),
+	middleware: [AuthMiddleware, permissionGuard(["user edit"])] as const,
 	request: {
-		params: z.object({
-			id: z.string().uuid(),
-		}),
+		params: IdParamSchema,
 		body: {
-			content: {
-				"application/json": {
-					schema: UserUpdateSchema,
-				},
-			},
+			content: { "application/json": { schema: UserUpdateSchema } },
+			required: true,
 		},
 	},
-	responses: {
-		200: {
-			content: {
-				"application/json": {
-					schema: z.object({}),
-				},
-			},
-			description: GuardDescriptions.userManagement.edit(),
-		},
-		...commonResponse(z.object({}), "UserUpdateResponse", {
-			exclude: [200, 201],
-		}),
-	},
+	responses: commonResponse(z.null(), "User updated", {
+		include: [200, 401, 403, 404, 422, 429, 500],
+	}),
 });
 
 UserRoutes.openapi(UserUpdateRoute, async (c) => {
-	const { id } = c.req.valid("param");
-	const data = c.req.valid("json");
-	const service = c.get("userService");
-	await service.update(data, id);
-
-	return ResponseToolkit.success(c, {}, t("user.updated"), 200);
+	await c
+		.get("userService")
+		.update(c.req.valid("param").id, c.req.valid("json"));
+	return ResponseToolkit.success(c, null, t("user.updated"), 200);
 });
 
-UserRoutes.use("/:id", Guards.userManagement.edit());
+const UserResetPasswordRoute = createRoute({
+	method: "post",
+	path: "/{id}/reset-password",
+	tags,
+	security,
+	summary: "Set a user's password",
+	description: withGuardDescription(
+		"Administrative password reset. Privilege-granting, so role-gated.",
+		{ roles: ["superuser"] },
+	),
+	middleware: [AuthMiddleware, roleGuard(["superuser"])] as const,
+	request: {
+		params: IdParamSchema,
+		body: {
+			content: { "application/json": { schema: UserResetPasswordSchema } },
+			required: true,
+		},
+	},
+	responses: commonResponse(z.null(), "Password reset", {
+		include: [200, 401, 403, 404, 422, 429, 500],
+	}),
+});
 
-// -------------------
-// DELETE /settings/users/:id
-// -------------------
+UserRoutes.openapi(UserResetPasswordRoute, async (c) => {
+	await c
+		.get("userService")
+		.resetPassword(c.req.valid("param").id, c.req.valid("json").newPassword);
+	return ResponseToolkit.success(c, null, t("user.passwordReset"), 200);
+});
+
+const UserSendVerificationRoute = createRoute({
+	method: "post",
+	path: "/{id}/send-verification-email",
+	tags,
+	security,
+	summary: "Send verification email",
+	description: withGuardDescription(
+		"Issue a new verification link and mail it to the user.",
+		{ permissions: ["user create"] },
+	),
+	middleware: [AuthMiddleware, permissionGuard(["user create"])] as const,
+	request: { params: IdParamSchema },
+	responses: commonResponse(z.null(), "Email queued", {
+		include: [200, 401, 403, 404, 422, 429, 500],
+	}),
+});
+
+UserRoutes.openapi(UserSendVerificationRoute, async (c) => {
+	await c.get("userService").sendVerificationEmail(c.req.valid("param").id);
+	return ResponseToolkit.success(c, null, t("auth.verificationEmailSent"), 200);
+});
+
+const UserSendResetRoute = createRoute({
+	method: "post",
+	path: "/{id}/send-reset-password-email",
+	tags,
+	security,
+	summary: "Send reset password email",
+	description: withGuardDescription(
+		"Issue a new reset link and mail it to the user.",
+		{ permissions: ["user create"] },
+	),
+	middleware: [AuthMiddleware, permissionGuard(["user create"])] as const,
+	request: { params: IdParamSchema },
+	responses: commonResponse(z.null(), "Email queued", {
+		include: [200, 401, 403, 404, 422, 429, 500],
+	}),
+});
+
+UserRoutes.openapi(UserSendResetRoute, async (c) => {
+	await c.get("userService").sendResetPasswordEmail(c.req.valid("param").id);
+	return ResponseToolkit.success(
+		c,
+		null,
+		t("auth.resetPasswordEmailSent"),
+		200,
+	);
+});
+
 const UserDeleteRoute = createRoute({
 	method: "delete",
 	path: "/{id}",
-	tags: ["Settings/Users"],
-	security: [{ Bearer: [] }],
-	request: {
-		params: z.object({
-			id: z.string().uuid(),
-		}),
-	},
-	responses: {
-		200: {
-			content: {
-				"application/json": {
-					schema: z.object({}),
-				},
-			},
-			description: GuardDescriptions.userManagement.delete(),
-		},
-		...commonResponse(z.object({}), "UserDeleteResponse", {
-			exclude: [200, 201],
-		}),
-	},
+	tags,
+	security,
+	summary: "Delete user",
+	description: withGuardDescription("Soft delete.", {
+		permissions: ["user delete"],
+	}),
+	middleware: [AuthMiddleware, permissionGuard(["user delete"])] as const,
+	request: { params: IdParamSchema },
+	responses: commonResponse(z.null(), "User deleted", {
+		include: [200, 401, 403, 404, 422, 429, 500],
+	}),
 });
 
 UserRoutes.openapi(UserDeleteRoute, async (c) => {
-	const { id } = c.req.valid("param");
-	const service = c.get("userService");
-	await service.delete(id);
-
-	return ResponseToolkit.success(c, {}, t("user.deleted"), 200);
+	await c.get("userService").delete(c.req.valid("param").id);
+	return ResponseToolkit.success(c, null, t("user.deleted"), 200);
 });
-
-UserRoutes.use("/:id", Guards.userManagement.delete());
 
 export default UserRoutes;

@@ -5,17 +5,13 @@ export type RoleList = {
 	updatedAt: Date;
 };
 
-export type RoleDetail = {
-	id: string;
-	name: string;
-	createdAt: Date;
-	updatedAt: Date;
+export type RoleDetail = RoleList & {
 	permissions: {
 		group: string;
 		names: {
 			id: string;
 			name: string;
-			is_assigned: boolean;
+			isAssigned: boolean;
 		}[];
 	}[];
 };

@@ -1,52 +1,47 @@
 import { z } from "@hono/zod-openapi";
-import { ZodPaginationResponseSchema } from "@types";
+import {
+	roleFilterableFields,
+	roleFilterExample,
+	roleSortableFields,
+} from "@database";
+import { paginatedSchema } from "@hono-libs/schemas";
+import { datatableQuerySchema } from "@types";
 
-// Helper to wrap response in success structure
-const successResponse = <T extends z.ZodTypeAny>(dataSchema: T) =>
-	z.object({
-		success: z.literal(true),
-		message: z.string(),
-		data: dataSchema,
-	});
-
-export const RoleSchema = z.object({
-	id: z.string(),
-	name: z.string(),
-	createdAt: z.coerce.date(),
-	updatedAt: z.coerce.date(),
+export const RoleQuerySchema = datatableQuerySchema({
+	sortFields: roleSortableFields,
+	filterFields: roleFilterableFields,
+	filterExample: roleFilterExample,
 });
 
-export const RoleDetailSchema = z.object({
-	id: z.string(),
-	name: z.string(),
-	createdAt: z.coerce.date(),
-	updatedAt: z.coerce.date(),
+export const RoleListSchema = z
+	.object({
+		id: z.string(),
+		name: z.string(),
+		createdAt: z.date(),
+		updatedAt: z.date(),
+	})
+	.openapi("RoleList");
+
+export const RoleListResponseSchema = paginatedSchema(RoleListSchema);
+
+export const RoleDetailSchema = RoleListSchema.extend({
 	permissions: z.array(
 		z.object({
 			group: z.string(),
 			names: z.array(
-				z.object({
-					id: z.string(),
-					name: z.string(),
-					is_assigned: z.boolean(),
-				}),
+				z.object({ id: z.string(), name: z.string(), isAssigned: z.boolean() }),
 			),
 		}),
 	),
-});
+}).openapi("RoleDetail");
 
-export const RoleListResponseSchema = successResponse(
-	ZodPaginationResponseSchema(RoleSchema),
-);
+export const RoleBodySchema = z
+	.object({
+		name: z.string().min(1).max(100).openapi({ example: "editor" }),
+		permissionIds: z
+			.array(z.string().uuid())
+			.openapi({ example: ["550e8400-e29b-41d4-a716-446655440000"] }),
+	})
+	.openapi("RoleRequest");
 
-export const RoleDetailResponseSchema = successResponse(RoleDetailSchema);
-
-export const RoleCreateSchema = z.object({
-	name: z.string().min(3).max(100),
-	permission_ids: z.array(z.string().uuid()),
-});
-
-export const RoleUpdateSchema = z.object({
-	name: z.string().min(3).max(100),
-	permission_ids: z.array(z.string().uuid()),
-});
+export type RoleInput = z.infer<typeof RoleBodySchema>;

@@ -233,12 +233,7 @@ export type Status = "active" | "inactive" | "pending" | "archived";
  * Common HTTP methods
  */
 export type HttpMethod =
-	| "GET"
-	| "POST"
-	| "PUT"
-	| "PATCH"
-	| "DELETE"
-	| "OPTIONS";
+	"GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS";
 
 /**
  * Async function type
@@ -322,3 +317,11 @@ export type Validator<T> = (_value: T) => boolean | string;
  * Transformer function type
  */
 export type Transformer<TIn, TOut = TIn> = (_value: TIn) => TOut;
+
+/**
+ * One entry of the `errors` array in a 400/422 response body
+ */
+export type FieldError = {
+	field: string;
+	message: string;
+};

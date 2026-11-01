@@ -2,9 +2,16 @@ export class StrToolkit {
 	static random(length: number = 16): string {
 		const characters =
 			"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-		return Array.from({ length }, () =>
-			characters.charAt(Math.floor(Math.random() * characters.length)),
-		).join("");
+		const limit = 256 - (256 % characters.length);
+		let result = "";
+		while (result.length < length) {
+			for (const byte of crypto.getRandomValues(new Uint8Array(length))) {
+				if (byte < limit && result.length < length) {
+					result += characters.charAt(byte % characters.length);
+				}
+			}
+		}
+		return result;
 	}
 
 	static after(subject: string, search: string): string {

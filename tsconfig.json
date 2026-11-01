@@ -112,6 +112,7 @@
 			"@hono-libs": ["./src/libs/hono"],
 			"@hono-libs/*": ["./src/libs/hono/*"],
 			"@errors": ["./src/libs/hono/errors"],
+			"@errors/*": ["./src/libs/hono/errors/*"],
 			"@guards": ["./src/libs/hono/guards"],
 			"@utils": ["./src/libs/utils"],
 			"@utils/*": ["./src/libs/utils/*"],

@@ -1,218 +1,145 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import {
-	RoleCreateSchema,
-	RoleDetailResponseSchema,
-	RoleListResponseSchema,
-	RoleUpdateSchema,
-} from "./schema";
-import { Env, ZodDatatableSchema } from "@types";
-import { AuthMiddleware, GuardDescriptions, Guards } from "@hono-libs";
-import { commonResponse } from "@hono-libs/schemas";
-import { ResponseToolkit } from "@utils";
+import { defaultHook } from "@errors";
+import { permissionGuard, withGuardDescription } from "@guards";
+import { AuthMiddleware } from "@hono-libs/middlewares/security/auth.middleware";
+import { commonResponse, IdParamSchema } from "@hono-libs/schemas";
 import { t } from "@i18n";
+import { Env } from "@types";
+import { DatatableToolkit, ResponseToolkit } from "@utils";
 
-const RoleRoutes = new OpenAPIHono<Env>();
+import {
+	RoleBodySchema,
+	RoleDetailSchema,
+	RoleListResponseSchema,
+	RoleQuerySchema,
+} from "./schema";
 
-RoleRoutes.use(AuthMiddleware);
+const RoleRoutes = new OpenAPIHono<Env>({ defaultHook });
 
-// -------------------
-// GET /settings/roles
-// -------------------
-const RoleGetRoute = createRoute({
+const tags = ["Settings/Roles"];
+const security = [{ Bearer: [] }];
+
+const RoleListRoute = createRoute({
 	method: "get",
-	path: "/",
-	tags: ["Settings/Roles"],
-	security: [{ Bearer: [] }],
-	request: {
-		query: ZodDatatableSchema,
-	},
-	responses: {
-		200: {
-			content: {
-				"application/json": {
-					schema: RoleListResponseSchema,
-				},
-			},
-			description: GuardDescriptions.roleManagement.list(),
-		},
-		...commonResponse(RoleListResponseSchema, "RoleGetResponse", {
-			exclude: [200, 201],
-		}),
-	},
+	path: "",
+	tags,
+	security,
+	summary: "List roles",
+	description: withGuardDescription("Paginated roles. Search matches name.", {
+		permissions: ["role list"],
+	}),
+	middleware: [AuthMiddleware, permissionGuard(["role list"])] as const,
+	request: { query: RoleQuerySchema },
+	responses: commonResponse(RoleListResponseSchema, "Roles", {
+		include: [200, 400, 401, 403, 422, 429, 500],
+	}),
 });
 
-RoleRoutes.openapi(RoleGetRoute, async (c) => {
-	const queryParam = c.req.valid("query");
-	const roleService = c.get("roleService");
-	const roles = await roleService.findAll(queryParam);
-
+RoleRoutes.openapi(RoleListRoute, async (c) => {
+	const query = DatatableToolkit.parseFilter(c, c.req.valid("query"));
+	const roles = await c.get("roleService").findAll(query);
 	return ResponseToolkit.success(c, roles, t("role.list"), 200);
 });
 
-RoleRoutes.use("/", Guards.roleManagement.list());
-
-// -------------------
-// POST /settings/roles
-// -------------------
 const RoleCreateRoute = createRoute({
 	method: "post",
-	path: "/",
-	tags: ["Settings/Roles"],
-	security: [{ Bearer: [] }],
+	path: "",
+	tags,
+	security,
+	summary: "Create role",
+	description: withGuardDescription(
+		"Create a role with its permissions. A duplicate name or an unknown permission id is 422.",
+		{ permissions: ["role create"] },
+	),
+	middleware: [AuthMiddleware, permissionGuard(["role create"])] as const,
 	request: {
 		body: {
-			content: {
-				"application/json": {
-					schema: RoleCreateSchema,
-				},
-			},
+			content: { "application/json": { schema: RoleBodySchema } },
+			required: true,
 		},
 	},
-	responses: {
-		201: {
-			content: {
-				"application/json": {
-					schema: z.object({}),
-				},
-			},
-			description: GuardDescriptions.roleManagement.create(),
-		},
-		...commonResponse(z.object({}), "RoleCreateResponse", {
-			exclude: [200, 201],
-		}),
-	},
+	responses: commonResponse(z.null(), "Role created", {
+		include: [201, 401, 403, 422, 429, 500],
+	}),
 });
 
 RoleRoutes.openapi(RoleCreateRoute, async (c) => {
-	const data = c.req.valid("json");
-	const roleService = c.get("roleService");
-	await roleService.create(data);
-
-	return ResponseToolkit.created(c, {}, t("role.created"));
+	await c.get("roleService").create(c.req.valid("json"));
+	return ResponseToolkit.success(c, null, t("role.created"), 201);
 });
 
-RoleRoutes.use("/", Guards.roleManagement.create());
-
-// -------------------
-// GET /settings/roles/:id
-// -------------------
 const RoleDetailRoute = createRoute({
 	method: "get",
 	path: "/{id}",
-	tags: ["Settings/Roles"],
-	security: [{ Bearer: [] }],
-	request: {
-		params: z.object({
-			id: z.string().uuid(),
-		}),
-	},
-	responses: {
-		200: {
-			content: {
-				"application/json": {
-					schema: RoleDetailResponseSchema,
-				},
-			},
-			description: GuardDescriptions.roleManagement.detail(),
-		},
-		...commonResponse(RoleDetailResponseSchema, "RoleDetailResponse", {
-			exclude: [200, 201],
-		}),
-	},
+	tags,
+	security,
+	summary: "Role detail",
+	description: withGuardDescription(
+		"The role plus every permission in the system, grouped, with isAssigned for this role.",
+		{ permissions: ["role detail"] },
+	),
+	middleware: [AuthMiddleware, permissionGuard(["role detail"])] as const,
+	request: { params: IdParamSchema },
+	responses: commonResponse(RoleDetailSchema, "Role", {
+		include: [200, 401, 403, 404, 422, 429, 500],
+	}),
 });
 
 RoleRoutes.openapi(RoleDetailRoute, async (c) => {
-	const { id } = c.req.valid("param");
-	const roleService = c.get("roleService");
-	const role = await roleService.findOne(id);
-
+	const role = await c.get("roleService").findOne(c.req.valid("param").id);
 	return ResponseToolkit.success(c, role, t("role.detail"), 200);
 });
 
-RoleRoutes.use("/:id", Guards.roleManagement.detail());
-
-// -------------------
-// PUT /settings/roles/:id
-// -------------------
 const RoleUpdateRoute = createRoute({
-	method: "put",
+	method: "patch",
 	path: "/{id}",
-	tags: ["Settings/Roles"],
-	security: [{ Bearer: [] }],
+	tags,
+	security,
+	summary: "Update role",
+	description: withGuardDescription(
+		"Full replace of name and permissions. Holders' cached access is dropped.",
+		{ permissions: ["role edit"] },
+	),
+	middleware: [AuthMiddleware, permissionGuard(["role edit"])] as const,
 	request: {
-		params: z.object({
-			id: z.string().uuid(),
-		}),
+		params: IdParamSchema,
 		body: {
-			content: {
-				"application/json": {
-					schema: RoleUpdateSchema,
-				},
-			},
+			content: { "application/json": { schema: RoleBodySchema } },
+			required: true,
 		},
 	},
-	responses: {
-		200: {
-			content: {
-				"application/json": {
-					schema: z.object({}),
-				},
-			},
-			description: GuardDescriptions.roleManagement.edit(),
-		},
-		...commonResponse(z.object({}), "RoleUpdateResponse", {
-			exclude: [200, 201],
-		}),
-	},
+	responses: commonResponse(z.null(), "Role updated", {
+		include: [200, 401, 403, 404, 422, 429, 500],
+	}),
 });
 
 RoleRoutes.openapi(RoleUpdateRoute, async (c) => {
-	const { id } = c.req.valid("param");
-	const data = c.req.valid("json");
-	const roleService = c.get("roleService");
-	await roleService.update(data, id);
-
-	return ResponseToolkit.success(c, {}, t("role.updated"), 200);
+	await c
+		.get("roleService")
+		.update(c.req.valid("param").id, c.req.valid("json"));
+	return ResponseToolkit.success(c, null, t("role.updated"), 200);
 });
 
-RoleRoutes.use("/:id", Guards.roleManagement.edit());
-
-// -------------------
-// DELETE /settings/roles/:id
-// -------------------
 const RoleDeleteRoute = createRoute({
 	method: "delete",
 	path: "/{id}",
-	tags: ["Settings/Roles"],
-	security: [{ Bearer: [] }],
-	request: {
-		params: z.object({
-			id: z.string().uuid(),
-		}),
-	},
-	responses: {
-		200: {
-			content: {
-				"application/json": {
-					schema: z.object({}),
-				},
-			},
-			description: GuardDescriptions.roleManagement.delete(),
-		},
-		...commonResponse(z.object({}), "RoleDeleteResponse", {
-			exclude: [200, 201],
-		}),
-	},
+	tags,
+	security,
+	summary: "Delete role",
+	description: withGuardDescription(
+		"Hard delete; user and permission assignments go with it.",
+		{ permissions: ["role delete"] },
+	),
+	middleware: [AuthMiddleware, permissionGuard(["role delete"])] as const,
+	request: { params: IdParamSchema },
+	responses: commonResponse(z.null(), "Role deleted", {
+		include: [200, 401, 403, 404, 422, 429, 500],
+	}),
 });
 
 RoleRoutes.openapi(RoleDeleteRoute, async (c) => {
-	const { id } = c.req.valid("param");
-	const roleService = c.get("roleService");
-	await roleService.delete(id);
-
-	return ResponseToolkit.success(c, {}, t("role.deleted"), 200);
+	await c.get("roleService").delete(c.req.valid("param").id);
+	return ResponseToolkit.success(c, null, t("role.deleted"), 200);
 });
-
-RoleRoutes.use("/:id", Guards.roleManagement.delete());
 
 export default RoleRoutes;

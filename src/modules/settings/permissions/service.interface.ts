@@ -1,20 +1,15 @@
-import { DatatableType, PaginationResponse, PermissionList } from "@types";
-import { PermissionCreateSchema, PermissionUpdateSchema } from "./schema";
-import type { z } from "@hono/zod-openapi";
+import type { DatatableType, PaginationResponse, PermissionList } from "@types";
+
+import type { PermissionCreateInput, PermissionUpdateInput } from "./schema";
 
 export interface IPermissionService {
-	findAll(
-		queryParam: DatatableType,
-	): Promise<PaginationResponse<PermissionList>>;
+	findAll(query: DatatableType): Promise<PaginationResponse<PermissionList>>;
 
-	create(data: z.infer<typeof PermissionCreateSchema>): Promise<void>;
+	create(data: PermissionCreateInput): Promise<void>;
 
 	findOne(id: string): Promise<PermissionList>;
 
-	update(
-		data: z.infer<typeof PermissionUpdateSchema>,
-		id: string,
-	): Promise<void>;
+	update(id: string, data: PermissionUpdateInput): Promise<void>;
 
 	delete(id: string): Promise<void>;
 }

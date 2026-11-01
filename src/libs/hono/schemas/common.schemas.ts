@@ -38,7 +38,7 @@ export const PasswordSchema = z
 		example: "MySecurePass123!",
 	});
 
-export const PasswordLoginSchema = z.string().openapi({
+export const PasswordLoginSchema = z.string().min(1).openapi({
 	description: "User password for login",
 	example: "MySecurePass123!",
 });
@@ -231,10 +231,10 @@ export const DateRangeSchema = z.object({
  * @validation Must be one of: active, inactive, suspended, blocked
  */
 export const UserStatusSchema = z
-	.enum(["active", "inactive", "suspended", "blocked"])
+	.enum(["ACTIVE", "INACTIVE", "SUSPENDED", "BLOCKED"])
 	.openapi({
 		description: "Current status of the user account",
-		example: "active",
+		example: "ACTIVE",
 	});
 
 /**
@@ -367,4 +367,17 @@ export const SoftDeleteQuerySchema = z.object({
 		description: "Force permanent deletion (bypass soft delete)",
 		example: "false",
 	}),
+});
+
+/**
+ * `{id}` path parameter: a malformed id is a 422, never a database error
+ */
+export const IdParamSchema = z.object({
+	id: z
+		.string()
+		.uuid()
+		.openapi({
+			param: { name: "id", in: "path" },
+			example: "550e8400-e29b-41d4-a716-446655440000",
+		}),
 });

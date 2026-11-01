@@ -1,4 +1,4 @@
-import { PermissionSelectOptions } from "@types";
+import type { PermissionSelectOptions } from "@types";
 
 export interface ISelectOptionsService {
 	getPermissionOptions(): Promise<PermissionSelectOptions[]>;

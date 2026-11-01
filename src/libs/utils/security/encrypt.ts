@@ -1,8 +1,9 @@
 import * as CryptoJS from "crypto-js";
+import { env } from "@config";
 
 export class EncryptionToolkit {
 	private static get secretKey(): string {
-		return process.env.APP_SECRET || "default-secret-key";
+		return env.APP_KEY;
 	}
 
 	static encrypt(text: string): string {
