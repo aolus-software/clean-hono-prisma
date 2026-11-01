@@ -67,24 +67,20 @@ export const EmailService = {
 			text: options.text,
 		};
 
-		logger.info(
-			`Sending email to ${options.to} with subject "${options.subject}"`,
-		);
+		const logContext = { template: options.template, lang: options.lang };
+		logger.info(logContext, "Sending email");
 
 		return await transporter
 			.sendMail({
 				...mailOptions,
 			})
 			.then(() => {
-				logger.info(
-					`Email sent to ${options.to} with subject "${options.subject}"`,
-				);
+				logger.info(logContext, "Email sent");
 			})
-			.catch((error) => {
-				logger.error(`Failed to send email to ${options.to}:`);
-				throw new Error("Failed to send email", {
-					cause: error,
-				});
+			.catch((error: { code?: string; responseCode?: number }) => {
+				const detail = { code: error.code, responseCode: error.responseCode };
+				logger.error({ ...logContext, ...detail }, "Failed to send email");
+				throw new Error("Failed to send email", { cause: detail });
 			});
 	},
 };

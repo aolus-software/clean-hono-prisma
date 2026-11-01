@@ -1,6 +1,8 @@
 ---
-description: Stage and commit all current changes following the repo's commit style
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*)
+name: commit
+description: "Stage and commit current changes with a Conventional Commit message derived from the diff. The Husky pre-commit hook runs install, format, lint, Prisma validate/format/migrate/generate, typecheck and build against the whole tree."
+risk: safe
+source: local
 ---
 
 Commit the current working-tree changes.
@@ -9,20 +11,20 @@ Run these in parallel first to gather context:
 
 - `git status` (no `-uall`)
 - `git diff` (staged + unstaged)
-- `git log --oneline -20` to match the existing commit-message style (prefixes like `chore:`, `refactor:`, `fix:`, `remove:`, `feat:`)
+- `git log --oneline -20` to match the existing commit-message style
 
 Then:
 
-1. Review the diff and decide the right prefix based on intent (`feat`, `fix`, `chore`, `refactor`, `docs`, `remove`, `test`).
-2. Stage files explicitly by path — **never** `git add -A` / `git add .`. Skip `.env`, credentials, generated `dist/`, `node_modules/`, and any other untracked files that look sensitive or build-output.
-3. Write a concise 1–2 sentence message focused on **why**, not a file list. Match the lowercased, prefix-style of recent commits.
-4. Create the commit with a HEREDOC body (no `--amend`, no `--no-verify`).
-5. Run `git status` after to confirm the working tree is clean.
+1. Review the diff and decide the prefix by intent (`feat`, `fix`, `chore`, `refactor`, `docs`, `db`, `test`).
+2. Stage files explicitly by path — **never** `git add -A` / `git add .`. Skip `.env`, credentials, `dist/`, `prisma/generated/`, `node_modules/`, `skills-lock.json`, and anything that looks sensitive or like build output.
+3. Write a concise 1–2 sentence message focused on **why**, not a file list. Lowercase after the colon, imperative, under 72 characters.
+4. Create the commit with a HEREDOC body (no `--amend`).
+5. Run `git status` after to confirm the working tree is clean, and check whether the hook created a migration folder under `prisma/migrations/` that does not belong to this change.
 
-If a pre-commit hook fails, **do not** `--amend` — fix the issue, re-stage, and create a new commit.
+If the pre-commit hook fails, **do not** `--amend` — fix the cause, re-stage, and create a new commit.
 
-Do not push unless I explicitly ask.
+Do not push unless explicitly asked.
 
-## Special rules
+## Skipping the hook
 
-If the agent already run `format`, `lint`, and `build` without any error or warning, the agent allowed to use --no-verify.
+`--no-verify` is allowed only if `bun run format`, `bun run lint`, `bun run typecheck`, and `bun run build` already ran clean in this session **and** the change touches no Prisma schema. See `.claude/rules/commit.md`.

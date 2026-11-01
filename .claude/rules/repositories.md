@@ -1,68 +1,85 @@
 # Rule: Repositories (`src/libs/database/postgres/repositories/`)
 
-Repositories are the **only** layer that talks to Drizzle directly. Services consume them; route handlers never import `db` for queries.
+Repositories are the **only** layer that talks to Prisma. Services consume them; route handlers never
+import `db`.
 
 ## Shape — factory function
 
-A repository is a function that returns an object of methods. **Do not** export a class, singleton, or top-level method bag.
-
 ```ts
-export const UserRepository = () => {
-	const dbInstance = db;
-	return {
-		db: dbInstance,
-		getDb: (tx?: DbTransaction) => tx || dbInstance,
+export function RoleRepository(tx?: Prisma.TransactionClient) {
+	const dbClient = tx || db;
 
-		findByEmail: async (email: string): Promise<UserForAuth | null> => {
-			const result = await dbInstance
-				.select()
-				.from(users)
-				.where(eq(users.email, email))
-				.limit(1);
-			return result[0] || null;
+	return {
+		async findById(id: string): Promise<{ id: string; name: string } | null> {
+			return dbClient.role.findUnique({
+				where: { id },
+				select: { id: true, name: true },
+			});
 		},
 	};
-};
+}
 ```
 
-Callers invoke the factory each time: `await UserRepository().findByEmail(email)`. Don't `const repo = UserRepository()` at module scope — the factory pattern exists so future DI overrides stay possible.
+- Called each time: `await RoleRepository().findById(id)`, or `RoleRepository(tx)` inside
+  `db.$transaction(async (tx) => ...)`. Never cache an instance at module scope.
+- `db` is the singleton from `src/libs/database/postgres/client.ts`. Never instantiate `PrismaClient`
+  elsewhere.
+- Use `select` to return exactly the DTO in `@types`; never return a password hash from a method whose
+  name does not say so (`findForAuth`, `findByEmail` used by login).
 
-## Transaction support
+## Read methods return `null`, they do not throw
 
-Every mutating method (and read methods that participate in a transaction) accepts an optional `tx?: DbTransaction` and resolves the active connection at the top:
+A miss is `null`. The service decides whether it is a 404 (`services-crud.md`).
+
+## Soft delete
+
+`User` is soft-deleted. **Every user read includes `deletedAt: null`**, including the
+`UserInformation` lookup, which also requires `status: "ACTIVE"`.
+
+## Lists — allow-lists, never raw keys
+
+Each list repository exports, next to the factory:
 
 ```ts
-update: async (
-	id: string,
-	data: UserUpdate,
-	tx?: DbTransaction,
-): Promise<void> => {
-	const database = tx || dbInstance;
-	await database.update(users).set(data).where(eq(users.id, id));
-};
+export const userSortableFields = ["id", "name", "email", "status", "createdAt", "updatedAt"] as const;
+export const userFilterableFields: FilterField[] = [
+	{ field: "status", enum: Object.values(UserStatus) },
+	"name",
+	"email",
+	{ field: "roleId", kind: "id" },
+	{ field: "createdAt", kind: "date" },
+	{ field: "updatedAt", kind: "date" },
+];
 ```
 
-`DbTransaction` is exported from `@database`. The convention is `const database = tx || dbInstance` at the top of the method, then use `database` throughout.
+`findAll(query: DatatableType)`:
 
-## Queries
+1. `DatatableToolkit.assertSort(...)`, `assertFilterKeys(...)`, `assertFilterEnums(...)` — unknown or
+   out-of-range input is a `BadRequestError` (400). A raw `sort` value never reaches `orderBy`.
+2. Build one `where` from the soft-delete filter, the `search` OR-group, and **every** filter ANDed
+   together (never let one filter overwrite another).
+3. Run `count` and `findMany` in `Promise.all`, `skip: (page - 1) * perPage`, `take: perPage`.
+4. Return `{ data, meta: { page, limit: perPage, totalCount } }`.
 
-- Use Drizzle's typed query builder. Prefer `db.query.<table>.findMany({ where, with, columns })` for relational reads; fall back to `select().from(...)` for joins/aggregates the relational API can't express.
-- Compose `WHERE` clauses incrementally with `and(...)`, `or(...)`, `eq`, `ilike`, `isNull`, `exists` — keep a single `SQL | undefined` accumulator.
-- **Soft delete**: most tables use `deleted_at` — every read starts with `let whereCondition: SQL | undefined = isNull(<table>.deleted_at);`. Don't forget this.
-- **Datatable reads**: read pagination/search/sort from `DatatableType` (from `@types`). Default to `defaultSort` (`@default`) and `desc`. Whitelist sortable columns via a `validateOrderBy` map — never trust `queryParam.sort` directly.
-- **Counts**: use `database.$count(table, whereCondition)` alongside the paged `findMany` — run both inside `Promise.all([...])`.
-- **Returning**: paginated reads return `PaginationResponse<T>` from `@types`. Detail/list item DTOs are also in `@types`.
+### Filter kinds
+
+| Kind          | Value                                  | Match                               |
+| ------------- | -------------------------------------- | ----------------------------------- |
+| enum          | one value or a comma list              | `in`, each value checked            |
+| `id`          | one uuid or a comma list               | `in` (uuids validated, 400 if not)  |
+| `date`        | `YYYY-MM-DD` or `start,end`            | inclusive whole days in `APP_TIMEZONE` |
+| plain         | any string; a comma is literal         | `contains`, `mode: "insensitive"`   |
+
+Search over an enum column (users' `status`) matches the enum members whose name contains the term;
+Prisma cannot run `contains` on an enum.
 
 ## What repositories should NOT do
 
-- No `throw new BadRequestError(...)` for business rules. Throw `NotFoundError` when a row is genuinely missing; everything else belongs in the service.
-- No cache reads/writes. Caching is the service's job (or `AuthMiddleware`'s).
-- No password hashing / JWT signing / mail sending. Repositories only own SQL.
-- No cross-table orchestration that requires a transaction the caller didn't supply — if you need a transaction, accept `tx` and let the caller open it.
-- No interaction with BullMQ queues, Redis, or external HTTP. Those belong in services.
+- No `throw` for business rules, no `t()`.
+- No cache reads or writes, no hashing, no JWT, no mail, no queues.
+- No transaction the caller did not supply — accept `tx` and let the service open it.
 
 ## File layout
 
-- One repository per file: `<entity>.repository.ts`.
-- Re-export from the repositories barrel so consumers `import { UserRepository } from "@database"`. Never import via relative path from outside `libs/database/`.
-- One repository per **aggregate**, not per query. New filters/joins extend an existing repo.
+One repository per aggregate, `<entity>.repository.ts`, re-exported from
+`src/libs/database/postgres/repositories/index.ts` and imported via `@database`.

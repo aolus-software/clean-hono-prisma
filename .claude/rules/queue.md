@@ -1,77 +1,53 @@
 # Rule: BullMQ queues and workers (`src/bull/`)
 
-Background work goes through BullMQ on Redis. Layout:
+Background work goes through BullMQ on Redis.
 
 ```
 src/bull/
-├── index.ts                   # re-exports + side-effect imports workers
-├── queue/
-│   ├── index.ts               # re-exports all queues
-│   └── <feature>.queue.ts     # one Queue per file
-└── worker/
-    ├── index.ts               # re-exports all workers
-    └── <feature>.worker.ts    # one Worker per file
+├── index.ts                     # side-effect imports the workers, re-exports the queues
+├── queue/<job>.queue.ts         # one Queue per file
+└── worker/<job>.worker.ts       # one Worker per file
 ```
 
-`src/bull/index.ts` side-effect-imports the workers, so simply importing anything from `@bull` boots the worker in the same process as the API. There is no separate worker entrypoint in this project — workers run in-process.
+`src/server.ts` imports `@bull`, so **the worker runs inside every API process** — in cluster mode,
+inside every worker process. There is no separate worker entrypoint.
 
 ## Queue file
 
-- One queue per file. Filename: `<job>.queue.ts`. Export name: `<job>Queue` (camelCase).
-- Connection comes from `RedisClient.getQueueRedisClient()` (`@database`) — never `new IORedis(...)` directly.
-- Queue name is a kebab-case string (`"send-email"`) and must match between the queue and its worker.
-- Type the queue payload: `new Queue<EmailOptions>("send-email", { ... })`.
-- Set sane `defaultJobOptions` if retries matter:
-  ```ts
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: "exponential", delay: 2000 },
-  }
-  ```
+- One queue per file, `<job>.queue.ts`, export `<job>Queue` (`sendEmailQueue`).
+- Connection from `RedisClient.getQueueConnection()` (`@database`); never a new client. BullMQ 6
+  takes `ioredis` as an optional peer, so `ioredis` is a direct dependency; Bun's native client
+  cannot back a queue.
+- Queue name is kebab-case (`"send-email"`) and identical in queue and worker.
+- Type the payload (`Queue<EmailOptions>`).
+- The email queue sets `defaultJobOptions: { attempts: 3, backoff: { type: "exponential", delay: 2000 } }`:
+  without `attempts` BullMQ tries a job once and the worker's re-throw retries nothing. A new
+  queue sets its own `attempts` the same way.
 
 ## Worker file
 
-- One worker per queue, in `src/bull/worker/`. Filename matches: `<job>.worker.ts`.
-- Same queue name and same payload type as the queue.
-- The processor function **must** wrap its work in try/catch, log both success and failure with structured `log` from `@utils`, and **re-throw** on failure so BullMQ retries:
-  ```ts
-  async (job) => {
-  	try {
-  		await EmailService.sendEmail(job.data);
-  		log.info({}, `Email job processed for ${job.data.to}`);
-  	} catch (error) {
-  		log.error(error, `Failed to process email job for ${job.data.to}`);
-  		throw error;
-  	}
-  };
-  ```
-- Attach a `.on("failed", (job, err) => log.error(...))` handler — that's the catch-all if all attempts fail.
-- Workers delegate to services (`EmailService`, `<Feature>Service`) so business rules stay in one place.
+- Same name and payload type as the queue.
+- The processor wraps its work in try/catch, logs success and failure with `logger` from `@utils`, and
+  **re-throws** so BullMQ retries.
+- Attach `.on("failed", ...)` as the catch-all.
+- Delegate to a service (`EmailService`) rather than doing the work inline.
 
 ## Producing jobs
 
-Services produce, never route handlers:
-
-```ts
-import { sendEmailQueue } from "@bull";
-
-await sendEmailQueue.add("welcome", { to: user.email, subject: "Welcome", ... });
-```
-
-Always `await` `.add(...)` — `no-floating-promises` is an error.
+Services produce, never handlers. Always `await queue.add(...)`. **Enqueue after the transaction
+commits**: a job enqueued inside a `db.$transaction` callback survives a rollback and mails a token
+that does not exist. Capture `getCurrentLocale()` into the payload (`lang`).
 
 ## Wiring up a new queue
 
-1. Add `src/bull/queue/<job>.queue.ts`, export from `src/bull/queue/index.ts`.
-2. Add `src/bull/worker/<job>.worker.ts`, export from `src/bull/worker/index.ts`.
-3. Define the payload type under `src/libs/types/` — never inline `Record<string, any>` job payloads.
-4. Producer-side: import the queue from `@bull` and `.add(...)` from inside a service.
+1. `src/bull/queue/<job>.queue.ts`, re-exported from `src/bull/index.ts`.
+2. `src/bull/worker/<job>.worker.ts`, side-effect-imported from `src/bull/index.ts`.
+3. Payload type under `src/libs/types/`.
 
 ## Don't
 
-- Don't open a new Redis client inside a queue or worker file. Reuse `RedisClient.getQueueRedisClient()`.
-- Don't swallow errors inside the worker processor — re-throw so retries happen.
-- Don't run blocking, multi-minute jobs without setting an explicit `lockDuration`.
-- Don't import a worker from outside `@bull`. The only allowed entry point is the side-effect import at app startup.
-- Don't enqueue inside a database transaction. If the transaction rolls back the job stays in Redis. Enqueue only after the transaction commits.
-- Don't use `console.log` in workers. Use `log` from `@utils`.
+- Don't open a Redis connection in a queue or worker file.
+- Don't swallow errors in a processor.
+- Don't import a worker from outside `@bull`.
+- Don't use `console.*` in workers.
+- Don't put a token or a token-bearing URL in a log line.

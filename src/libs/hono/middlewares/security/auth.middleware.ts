@@ -1,45 +1,43 @@
-import { UnauthorizedError } from "@errors";
-import { Cache, UserInformationCacheKey } from "@cache";
-import { JWTToolkit } from "@utils";
-import { Context } from "hono";
-import { UserInformation, Env } from "@types";
+import { Context, Next } from "hono";
+import {
+	Cache,
+	USER_INFORMATION_TTL_SECONDS,
+	UserInformationCacheKey,
+} from "@cache";
 import { UserRepository } from "@database";
+import { UnauthorizedError } from "@errors";
 import { t } from "@i18n";
+import { Env, UserInformation } from "@types";
+import { JWTToolkit } from "@utils";
 
+/**
+ * Resolves the bearer access token to the current user. A refresh token, an
+ * expired or malformed token, and an inactive or deleted user are all 401.
+ */
 export const AuthMiddleware = async (
 	c: Context<Env>,
-	next: () => Promise<void>,
-) => {
-	const authHeader = c.req.header("authorization") || "";
-	const token = authHeader.startsWith("Bearer ")
-		? authHeader.slice(7)
-		: authHeader;
-
-	if (!token) {
+	next: Next,
+): Promise<void> => {
+	const header = c.req.header("authorization") ?? "";
+	if (!header.startsWith("Bearer ") || header.length <= 7) {
 		throw new UnauthorizedError(t("auth.noTokenProvided"));
 	}
 
-	const payload = await new JWTToolkit().verify<{
-		userId: string;
-	}>(token);
-	if (!payload?.userId) {
-		throw new UnauthorizedError(t("auth.invalidTokenPayload"));
+	const payload = await JWTToolkit.verify(header.slice(7), "access");
+	if (!payload) {
+		throw new UnauthorizedError(t("auth.invalidToken"));
 	}
 
-	const cachekey = UserInformationCacheKey(payload.userId);
-	let user: UserInformation | null = await Cache.get<UserInformation>(cachekey);
+	const cacheKey = UserInformationCacheKey(payload.id);
+	let user = await Cache.get<UserInformation>(cacheKey);
 	if (!user) {
-		const userRecord = await UserRepository().findUserInformation(
-			payload.userId,
-		);
-		if (!userRecord) {
+		user = await UserRepository().findUserInformation(payload.id);
+		if (!user) {
 			throw new UnauthorizedError(t("auth.userNotFound"));
 		}
-
-		user = userRecord;
-		await Cache.set(cachekey, user);
+		await Cache.set(cacheKey, user, USER_INFORMATION_TTL_SECONDS);
 	}
 
 	c.set("currentUser", user);
-	return next();
+	await next();
 };

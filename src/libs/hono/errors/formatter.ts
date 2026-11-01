@@ -1,16 +1,9 @@
 import { ZodError } from "zod";
 import { translateZodIssue } from "@i18n";
+import type { FieldError } from "@types";
 
-export const formatZodError = (error: ZodError): Record<string, string[]> => {
-	const errors: Record<string, string[]> = {};
-
-	for (const issue of error.issues) {
-		const path = issue.path.join(".");
-		if (!errors[path]) {
-			errors[path] = [];
-		}
-		errors[path].push(translateZodIssue(issue));
-	}
-
-	return errors;
-};
+export const formatZodError = (error: ZodError): FieldError[] =>
+	error.issues.map((issue) => ({
+		field: issue.path.length > 0 ? issue.path.join(".") : "general",
+		message: translateZodIssue(issue),
+	}));

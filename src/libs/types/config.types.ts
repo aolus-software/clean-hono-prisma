@@ -14,11 +14,11 @@ export interface AppConfig {
 	APP_URL: URL;
 	APP_ENV: Environment;
 	APP_TIMEZONE: string;
-	APP_SECRET: string;
-	APP_JWT_SECRET: string;
-	APP_JWT_EXPIRES_IN: number;
+	APP_KEY: string;
+	ENABLE_API_DOCS: boolean;
 	APP_CLUSTER_MODE: boolean;
 	APP_CLUSTER_WORKERS: number;
+	APP_REUSE_PORT: boolean;
 	LOG_LEVEL: LogLevel;
 	CLIENT_URL: URL;
 }
@@ -66,24 +66,11 @@ export interface MailConfig {
  * CORS configuration options
  */
 export interface CorsConfig {
-	origin: string | string[] | ((_origin: string) => string | undefined);
+	origin: string | string[];
 	methods: string[];
 	allowedHeaders: string[];
-	exposedHeaders: string[];
 	maxAge: number;
 	credentials: boolean;
-}
-
-/**
- * Raw CORS environment variables
- */
-export interface CorsEnvConfig {
-	CORS_ORIGIN: string;
-	CORS_METHODS: string;
-	CORS_ALLOWED_HEADERS: string;
-	CORS_EXPOSED_HEADERS: string;
-	CORS_MAX_AGE: number;
-	CORS_CREDENTIALS: boolean;
 }
 
 /**
@@ -91,13 +78,11 @@ export interface CorsEnvConfig {
  * Union of all config interfaces
  */
 export interface EnvironmentConfig
-	extends
-		AppConfig,
-		DatabaseConfig,
-		ClickHouseConfig,
-		RedisConfig,
-		MailConfig,
-		CorsEnvConfig {}
+	extends AppConfig, DatabaseConfig, ClickHouseConfig, RedisConfig, MailConfig {
+	ALLOWED_HOST: string;
+	JWT_SECRET: string;
+	JWT_REFRESH_SECRET: string;
+}
 
 /**
  * Configuration validation result
@@ -126,12 +111,7 @@ export type ConfigValidator<T> = (_config: T) => ConfigValidationResult;
  * Configuration section names
  */
 export type ConfigSection =
-	| "app"
-	| "database"
-	| "clickhouse"
-	| "redis"
-	| "mail"
-	| "cors";
+	"app" | "database" | "clickhouse" | "redis" | "mail" | "cors";
 
 /**
  * Configuration metadata

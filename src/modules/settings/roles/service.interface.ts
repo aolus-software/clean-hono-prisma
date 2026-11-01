@@ -1,20 +1,20 @@
-import {
+import type {
 	DatatableType,
 	PaginationResponse,
 	RoleDetail,
 	RoleList,
 } from "@types";
-import { RoleCreateSchema, RoleUpdateSchema } from "./schema";
-import type { z } from "@hono/zod-openapi";
+
+import type { RoleInput } from "./schema";
 
 export interface IRoleService {
-	findAll(queryParam: DatatableType): Promise<PaginationResponse<RoleList>>;
+	findAll(query: DatatableType): Promise<PaginationResponse<RoleList>>;
 
-	create(data: z.infer<typeof RoleCreateSchema>): Promise<void>;
+	create(data: RoleInput): Promise<void>;
 
 	findOne(id: string): Promise<RoleDetail>;
 
-	update(data: z.infer<typeof RoleUpdateSchema>, id: string): Promise<void>;
+	update(id: string, data: RoleInput): Promise<void>;
 
 	delete(id: string): Promise<void>;
 }

@@ -5,3 +5,4 @@ export * from "./database.config";
 export * from "./mail.config";
 export * from "./redis.config";
 export * from "./env";
+export * from "./jwt.config";

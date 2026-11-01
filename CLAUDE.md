@@ -1,193 +1,166 @@
-# CLAUDE.md - clean-hono-prisma
+# CLAUDE.md
 
-Clean architecture backend API built with Hono, TypeScript, and Bun. Uses Prisma ORM with PostgreSQL, Redis for caching/rate limiting, BullMQ for background jobs, and ClickHouse for analytics.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-This project mirrors `clean-hono` feature-for-feature — the only difference is the ORM: Prisma instead of Drizzle.
+## Project
 
-## Tech Stack
-
-- **Runtime**: Bun
-- **Framework**: Hono with `@hono/zod-openapi`
-- **Language**: TypeScript (strict)
-- **Primary DB**: PostgreSQL via Prisma ORM
-- **Cache / Rate limiting**: Redis (ioredis)
-- **Queue**: BullMQ
-- **Analytics**: ClickHouse (optional)
-- **Validation**: Zod
-- **API Docs**: Scalar (`@scalar/hono-api-reference`)
-- **Logging**: pino via hono-pino
+`clean-hono-prisma` — a clean-architecture REST starter on **Hono 4** with `@hono/zod-openapi`
+(Zod validation and the OpenAPI spec come from the same route definitions), **Prisma 7** with the
+`@prisma/adapter-pg` driver on **PostgreSQL**, Redis (Bun's native `RedisClient`) for the user cache,
+BullMQ for queued mail, JWT auth with access tokens and rotating, revocable refresh tokens, a hand-rolled `en`/`id`
+i18n layer, Scalar docs, and optional ClickHouse. Runtime is **Bun**, with an optional cluster mode.
+It ships an auth flow and a settings domain (users, roles, permissions, select options) with RBAC.
 
 ## Commands
 
+Use **Bun** (`bun run`, `bunx`), never npm/pnpm/yarn. The `Makefile` is the entry point; every target
+wraps a script or a Prisma CLI call.
+
 ```sh
 # Development
-bun run dev             # Start server with hot reload
-bun run typecheck       # TypeScript type check (no emit)
+make dev                 # bun run --hot src/index.ts
+make build               # typecheck + bundle to dist/ (mail templates copied to dist/templates)
+make start               # bun run dist/index.js
+bun run start:cluster    # same, with APP_CLUSTER_MODE=true
 
-# Build & Production
-bun run build           # Build to dist/
-bun run start           # Start production server
+# Quality
+make lint                # eslint
+make lint-fix
+make format              # prettier --write
+bun run format:check     # prettier --check (what CI runs)
+make typecheck           # tsc --noEmit
 
-# Code Quality
-bun run lint            # Run ESLint
-bun run lint:fix        # Auto-fix ESLint issues
-bun run format          # Format with Prettier
+# Tests
+# There is no test runner. Do not invent `bun test` commands.
 
-# Database - PostgreSQL / Prisma
-bun run db:generate     # Generate Prisma client (prisma generate)
-bun run db:migrate      # Create and apply migration (prisma migrate dev)
-bun run db:push         # Push schema directly (prisma db push, dev only)
-bun run db:pull         # Introspect database into schema (prisma db pull)
-bun run db:studio       # Open Prisma Studio (prisma studio)
-bun run db:seed         # Seed with initial data
+# Database (Prisma)
+make db-generate         # prisma generate -> prisma/generated (run first on a fresh clone)
+make db-migrate-dev      # prisma migrate dev: create + apply a migration, regenerate
+make db-migrate          # prisma migrate deploy
+make db-push             # prisma db push (dev only)
+make db-studio
+make db-drop             # prisma migrate reset --force (destructive)
+make db-seed             # idempotent seeder
+make fresh               # db-drop + db-push + db-seed (destructive)
+make reset               # db-generate + db-migrate + db-seed
+make db-clickhouse-migrate / db-clickhouse-status
 
-# Database - ClickHouse
-bun run db:clickhouse:migrate   # Run ClickHouse migrations
-bun run db:clickhouse:status    # Check ClickHouse migration status
+# Deployment (Docker)
+make docker-up | docker-down | docker-restart | docker-logs | docker-ps
+make docker-build        # compose images + the migrator image
+make docker-migrate      # migrator image on the compose network
+make docker-seed
+make docker-deploy       # git pull + up --build + migrate
 ```
 
-API available at `http://localhost:3000`. Docs at `http://localhost:3000/docs`.
+The seeder (`src/libs/database/seed/index.ts`) creates the 15 permissions, the `superuser` and
+`admin` roles (both granted the full catalogue), and `superuser@example.com` / `admin@example.com`
+with password `S3crEtP4ssw0rd!`. Running it twice changes nothing; a failure exits 1.
 
-## Project Structure
+## Architecture
 
-```
-prisma/
-└── schema.prisma                   # Prisma schema (models + datasource + generator)
-src/
-├── app.ts                          # Hono app setup
-├── bootstrap.ts                    # Bootstrap configuration
-├── index.ts                        # Entry point
-├── bull/
-│   ├── queue/                      # BullMQ job queues
-│   └── worker/                     # BullMQ job workers
-├── libs/
-│   ├── cache/                      # Redis cache utilities
-│   ├── config/                     # App, DB, Redis, mail configs + env validation
-│   ├── database/
-│   │   ├── clickhouse/             # ClickHouse client, repos, migrations
-│   │   ├── postgres/
-│   │   │   ├── client.ts           # Prisma client singleton
-│   │   │   └── repositories/       # Prisma repository implementations
-│   │   ├── redis/                  # Redis client
-│   │   └── seed/                   # Database seeders
-│   ├── default/                    # Default constants (pagination, sort, password rules, etc.)
-│   ├── hono/
-│   │   ├── core/                   # DI container
-│   │   ├── errors/                 # Custom error classes + handler
-│   │   ├── guards/                 # Permission and role guards
-│   │   ├── middlewares/
-│   │   │   ├── core/               # DI, logging, performance, request-id
-│   │   │   └── security/           # Auth, CORS, rate-limiter, body-limit, security-headers
-│   │   └── schemas/                # Shared response schemas
-│   ├── mail/                       # Nodemailer service + templates
-│   ├── plugins/                    # Plugin system (registry, builder, examples)
-│   ├── types/                      # TypeScript types and interfaces
-│   └── utils/                      # Date, string, number, security, hono helpers
-└── modules/
-    ├── auth/                       # Authentication (routes, schema, service)
-    ├── home/                       # Health/home route
-    ├── profile/                    # User profile (routes, schema, service)
-    └── settings/
-        ├── permissions/
-        ├── roles/
-        ├── select-options/
-        └── users/
-```
+| Alias               | Path                   | Purpose                                                                    |
+| ------------------- | ---------------------- | -------------------------------------------------------------------------- |
+| `@config`           | `src/libs/config`      | envalid `env` and the config objects (`AppConfig`, `JWT_CONFIG`, ...)      |
+| `@database`         | `src/libs/database`    | Prisma `db`, repositories, Redis client, ClickHouse                        |
+| `@cache`            | `src/libs/cache`       | `Cache`, cache keys, `forgetUserInformation`, `revokeSessions`             |
+| `@default`          | `src/libs/default`     | constants and token lifetime functions                                     |
+| `@hono-libs`        | `src/libs/hono`        | middlewares, DI container, shared Zod schemas                              |
+| `@errors`           | `src/libs/hono/errors` | error classes, `registerException`, `defaultHook`                          |
+| `@guards`           | `src/libs/hono/guards` | `permissionGuard`, `roleGuard`                                             |
+| `@types`            | `src/libs/types`       | DTOs, `DatatableType`, `datatableQuerySchema`, `Env`                       |
+| `@utils`            | `src/libs/utils`       | `ResponseToolkit`, `DatatableToolkit`, `JWTToolkit`, `Hash`, `logger`, ... |
+| `@i18n`             | `src/libs/i18n`        | `t`, `translate`, catalogs, locale store                                   |
+| `@mail/*`           | `src/libs/mail`        | `EmailService`, transport, templates                                       |
+| `@bull`             | `src/bull`             | queues; importing it boots the worker                                      |
+| `@modules`          | `src/modules`          | feature modules                                                            |
+| `@prisma-generated` | `prisma/generated`     | generated Prisma client (gitignored)                                       |
 
-## Architecture Patterns
+### Request flow
 
-### Clean Architecture
+`routes.ts` (`createRoute` + handler, HTTP only) → service class (business rules, existence and
+uniqueness checks, transactions via `db.$transaction`, cache invalidation, queue dispatch) →
+repository factory (Prisma queries only). Boot: `src/index.ts` picks `src/cluster.ts` (primary spawns
+workers) or `src/server.ts` (`Bun.serve` on `app.fetch`, imports `@bull`); `src/app.ts` runs
+`bootstrap()` (DI registration), the global middleware stack, `registerException`, then mounts
+`src/modules/index.ts`.
 
-- Services hold business logic; repositories handle data access; routes define HTTP endpoints
-- Dependencies point inward — outer layers depend on inner layers, not the reverse
-- Each module under `src/modules/` follows the same structure:
-  - `routes.ts` - Route definitions with OpenAPI decorators
-  - `schema.ts` - Zod schemas for validation and OpenAPI
-  - `service.interface.ts` - Service contract
-  - `service.ts` - Service implementation
+### The non-obvious bits
 
-### Dependency Injection
+- **Guards are per route and must live in `createRoute({ middleware: [AuthMiddleware, ...] })`.**
+  That middleware runs before validation and the handler. A guard attached with `.use()` after
+  `.openapi()` never protects the handler, and `.use()` ignores the method. Nothing is gated by
+  default: no `AuthMiddleware` means public; no guard means any logged-in user.
+- **Guards are AND and superuser bypasses both.** `permissionGuard(["a","b"])` needs both;
+  privilege-granting routes (admin password reset, select-options) are `roleGuard(["superuser"])`.
+- **Two JWTs.** Access (`JWT_SECRET`, 1d) and refresh (`JWT_REFRESH_SECRET`, 7d), payload
+  `{ id, type }` (refresh adds `jti`). `AuthMiddleware` accepts only `type: "access"`;
+  `POST /auth/refresh` accepts only `type: "refresh"` whose `jti` matches
+  `RefreshTokenCacheKey(id)` in Redis, re-checks the user, and rotates the `jti`. Password change or
+  reset (own, link, admin), user delete, and a non-`ACTIVE` status update call `revokeSessions`.
+  Any verification failure is 401.
+- **`UserInformation` is cached** at `UserInformationCacheKey(id)` for 3600 s. The DB read requires
+  `status: ACTIVE` and `deletedAt: null`. Every write that changes a user's status, roles, profile,
+  password or deletion, and every role/permission update or delete, deletes the affected keys.
+- **Repositories are factories**: `UserRepository()` or `UserRepository(tx)`. Reads return `null`; the
+  service throws `NotFoundError`. Lists validate sort and filter keys against exported allow-lists
+  (400 for an unknown filter key, 422 for a bad `sort`), and `filter[<key>]` params are read off the
+  raw query by `DatatableToolkit.parseFilter(c, query)`.
+- **Services are classes in the container.** Register in `src/bootstrap.ts`, inject in
+  `diMiddleware`, type in `Variables`, read with `c.get("userService")`.
+- **Envelope**: `{ status, success, message, data }`; 400/422 carry `errors: [{ field, message }]`.
+  Uniqueness is 422; login and token failures are 400.
+- **Env only through `@config`.** `src/libs/config/env.ts` validates with envalid; `JWT_SECRET` and
+  `JWT_REFRESH_SECRET` are required.
+- **`/docs` exists only when `ENABLE_API_DOCS=true`** (default false, independent of `NODE_ENV`).
+- **Mail is queued after the transaction commits**; the worker runs in every API process.
+- **Users are soft-deleted** (`deletedAt`); `User.email` has no DB unique constraint, so live
+  uniqueness is the service's `findLiveByEmail` check.
+- **Prisma default names**, camelCase columns, UPPERCASE `UserStatus` values on the wire. The build
+  bundles to `dist/index.js`, so mail templates are copied to `dist/templates`.
+- **Cluster mode** spawns `APP_CLUSTER_WORKERS` Bun processes sharing the port via `reusePort`. The rate
+  limiter is in memory and per process.
 
-- Container is in `src/libs/hono/core/container.ts`
-- Register all services and repositories in the container
-- Use the DI middleware (`libs/hono/middlewares/core/di.middleware.ts`) to inject dependencies into routes
+## Conventions
 
-### Repository Pattern
+- Tabs, double quotes, semicolons (Prettier). No `any`, no floating promises, no `console.*` (use
+  `logger`), one block comment above non-obvious blocks only, no emojis.
+- Permission strings are `<group> <action>`, space-separated, from the seeder.
+- Updates are `PATCH`, never `PUT`; creates return 201 with `data: null`; deletes return 200.
+- Uniqueness conflicts are 422; the service owns existence and uniqueness checks.
+- Every user-facing string is an i18n key in both `en.json` and `id.json`.
+- Rate limiting is global (100 / 60 s) and credential endpoints are never loosened.
+- Routes are flat: no global prefix, no versioning.
 
-- All database access goes through repository classes in `src/libs/database/postgres/repositories/`
-- Repository interfaces are defined in `src/libs/types/repositories/`
-- Use the Prisma client singleton from `src/libs/database/postgres/client.ts`
-- Never write Prisma queries directly in services
+Two rules apply to every change: `.claude/rules/contradiction-halt.md` and
+`.claude/rules/documentation.md`. Read them first.
 
-### Error Handling
+## Adding a new feature module
 
-- Throw custom error classes from `src/libs/hono/errors/`
-- Available: `BadRequestError`, `UnauthorizedError`, `ForbiddenError`, `NotFoundError`, `ConflictError`, `UnprocessableEntityError`, `ServiceUnavailableError`
-- Error codes are in `src/libs/hono/errors/error-codes.constant.ts`
-- Centralized handler in `src/libs/hono/errors/error.handler.ts` manages all responses
+1. Create `src/modules/<name>/{routes.ts,schema.ts,service.interface.ts,service.ts}`.
+2. Define each route with `createRoute(...)` (request schemas, `responses`, `summary`,
+   `description`, `tags`, `security`, `middleware: [AuthMiddleware, ...guards]` when protected) and
+   `.openapi(route, handler)` on an `OpenAPIHono<Env>({ defaultHook })`.
+3. Mount the router in `src/modules/index.ts` (or `src/modules/settings/index.ts`).
+4. Register the service in `src/bootstrap.ts`, inject it in `diMiddleware`, add it to `Variables`.
+5. Put queries in a repository under `src/libs/database/postgres/repositories/` and re-export it.
+6. Add i18n keys to both catalogs and run `bun run i18n:keys`.
+7. Update `.claude/rules/routes.md` and `docs/API_DOCUMENTATION.md`.
 
-### Guards
+## Deeper documentation
 
-- `permission.guard.ts` and `role.guard.ts` in `src/libs/hono/guards/`
-- Apply to protected routes for RBAC authorization
+- [`docs/API_DOCUMENTATION.md`](./docs/API_DOCUMENTATION.md) — envelope, auth, route map, list queries
+- [`docs/CONFIGURATION.md`](./docs/CONFIGURATION.md) — every env var
+- [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) — Docker, migrator, cluster mode
+- [`docs/ERROR_HANDLING.md`](./docs/ERROR_HANDLING.md) — error classes and status mapping
+- [`docs/SECURITY.md`](./docs/SECURITY.md) — auth, tokens, RBAC, rate limiting, headers
+- [`docs/MIDDLEWARE.md`](./docs/MIDDLEWARE.md) — the middleware stack
 
-## Prisma Usage
+## Skills, rules, and commands
 
-### Schema
-
-All models are defined in `prisma/schema.prisma`. After any schema change:
-
-```sh
-bun run db:generate   # Regenerate Prisma client types
-bun run db:migrate    # Create and apply a new migration (production-safe)
-# or
-bun run db:push       # Push directly without a migration file (dev only)
-```
-
-### Client
-
-Import the singleton client, never instantiate `PrismaClient` directly:
-
-```ts
-import { db } from "@/libs/database/postgres/client";
-```
-
-### Repositories
-
-Repositories wrap Prisma calls and implement the interfaces from `src/libs/types/repositories/`. Return plain objects or typed DTOs — do not leak Prisma types into services.
-
-## Code Style
-
-### TypeScript
-
-- Strict mode — never use `any`; use proper types or `unknown` with type guards
-- ESLint rules enforced: `@typescript-eslint/no-explicit-any: error`, `@typescript-eslint/no-floating-promises: error`, `no-console: warn`
-
-### Comments
-
-- Add comments only before function blocks or complex logic blocks
-- For complex conditions, add a comment before the condition block, not inline
-- Keep comments concise and meaningful — no line-by-line comments
-
-### General
-
-- No icons or emojis in any files
-- Validate all inputs with Zod schemas
-- Use caching where appropriate (see `src/libs/cache/`)
-- Implement pagination for all list endpoints using types in `src/libs/types/hono/pagination.ts`
-- Follow conventional commits format
-
-## Key File Paths
-
-| Purpose                 | Path                                           |
-| ----------------------- | ---------------------------------------------- |
-| Prisma schema           | `prisma/schema.prisma`                         |
-| Prisma client singleton | `src/libs/database/postgres/client.ts`         |
-| Environment validation  | `src/libs/config/env.ts`                       |
-| Config validators       | `src/libs/config/config.validator.ts`          |
-| DI container            | `src/libs/hono/core/container.ts`              |
-| Error classes           | `src/libs/hono/errors/`                        |
-| Error codes             | `src/libs/hono/errors/error-codes.constant.ts` |
-| Response schemas        | `src/libs/hono/schemas/response.schemas.ts`    |
-| Password rules          | `src/libs/default/strong-password.ts`          |
-| Common types            | `src/libs/types/common.types.ts`               |
+- `.claude/skills` is a symlink to `../.agents/skills`, a vendored bundle (workflow skills plus
+  `hono` and `prisma-client-api`); `.agents/skills/README.md` indexes it. `skills-lock.json` is
+  gitignored.
+- `.claude/rules/` — 26 rules, indexed with their scope in `.claude/rules/README.md`.
+- `.claude/commands/` — `/commit`, `/audit-flow` (read-only sweep writing `docs/audit-findings.md`),
+  `/update-todo` (reconciles `TODO.md`).

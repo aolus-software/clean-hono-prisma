@@ -1,15 +1,13 @@
-import { UserInformation } from "@types";
-import type { z } from "@hono/zod-openapi";
-import { UpdatePasswordSchema, UpdateProfileSchema } from "./schema";
+import type { UserInformation } from "@types";
 
 export interface IProfileService {
-	updateUserProfile(
-		user: UserInformation,
-		data: z.infer<typeof UpdateProfileSchema>,
+	updateProfile(
+		userId: string,
+		data: { name: string; email: string },
 	): Promise<UserInformation>;
 
-	changeUserPassword(
-		user: UserInformation,
-		data: z.infer<typeof UpdatePasswordSchema>,
+	changePassword(
+		userId: string,
+		data: { currentPassword: string; newPassword: string },
 	): Promise<void>;
 }

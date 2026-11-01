@@ -1,291 +1,141 @@
-import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
-import {
-	EmailVerificationSchema,
-	ForgotPasswordSchema,
-	LoginSchema,
-	RegisterSchema,
-	ResendVerificationSchema,
-	ResetPasswordSchema,
-} from "./schema";
-
-import { commonResponse } from "@hono-libs/schemas";
-import { ResponseToolkit } from "@utils";
+import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { defaultHook } from "@errors";
+import { commonResponse } from "@hono-libs/schemas";
 import { t } from "@i18n";
-// import { commonResponse } from "@toolkit/schemas";
-// import { ZodUserInformation } from "@packages/*";
-import { Env, ZodUserInformation } from "@types";
+import { Env } from "@types";
+import { ResponseToolkit } from "@utils";
+
+import {
+	EmailOnlySchema,
+	LoginDataSchema,
+	LoginSchema,
+	RefreshSchema,
+	RegisterSchema,
+	ResetPasswordSchema,
+	TokenPairSchema,
+	VerifyEmailSchema,
+} from "./schema";
 
 const AuthRoutes = new OpenAPIHono<Env>({ defaultHook });
 
-// ============================================================
-// POST /auth/login
-// ============================================================
+const jsonBody = <T extends z.ZodTypeAny>(schema: T) => ({
+	body: { content: { "application/json": { schema } }, required: true },
+});
 
-const loginDataSchema = z
-	.object({
-		user: ZodUserInformation,
-		token: z.string().openapi({
-			description: "JWT access token for authenticated requests",
-			example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-		}),
-	})
-	.openapi("LoginResponse", {
-		description: "Successful login response with user data and access token",
-	});
-
-const loginRoute = createRoute({
+const LoginRoute = createRoute({
 	method: "post",
 	path: "/login",
-	summary: "User login",
-	description:
-		"Authenticate user with email and password. Returns user information and JWT access token on success.",
 	tags: ["Auth"],
-	request: {
-		body: {
-			content: {
-				"application/json": {
-					schema: LoginSchema,
-					example: {
-						email: "user@example.com",
-						password: "MyPassword123!",
-					},
-				},
-			},
-			description: "User login credentials",
-			required: true,
-		},
-	},
-	responses: {
-		...commonResponse(loginDataSchema, "Login successful", {
-			exclude: [201, 403, 404],
-			validationErrors: {
-				email: ["Email not found", "Email format is invalid"],
-				password: ["Incorrect password"],
-			},
-		}),
-	},
+	summary: "Log in",
+	description:
+		"Exchange email and password for an access token (1 day) and a refresh token (7 days). Unknown email, wrong password, unverified email and inactive account all answer 400 on `email`.",
+	security: [],
+	request: jsonBody(LoginSchema),
+	responses: commonResponse(LoginDataSchema, "Logged in", {
+		include: [200, 400, 422, 429, 500],
+	}),
 });
 
-AuthRoutes.openapi(loginRoute, async (c) => {
+AuthRoutes.openapi(LoginRoute, async (c) => {
 	const { email, password } = c.req.valid("json");
-	const service = c.get("authService");
-	const result = await service.login(email, password);
-	return ResponseToolkit.success<z.infer<typeof loginDataSchema>, 200>(
-		c,
-		result,
-		t("auth.loginSuccess"),
-		200,
-	);
+	const data = await c.get("authService").login(email, password);
+	return ResponseToolkit.success(c, data, t("auth.loginSuccess"), 200);
 });
 
-// ============================================================
-// POST /auth/register
-// ============================================================
+const RefreshRoute = createRoute({
+	method: "post",
+	path: "/refresh",
+	tags: ["Auth"],
+	summary: "Refresh tokens",
+	description:
+		"Exchange a valid refresh token for a new access and refresh token pair. The presented refresh token is spent: sending it again is 401. An access token, an expired or revoked token, or a token for an inactive or deleted user is 401.",
+	security: [],
+	request: jsonBody(RefreshSchema),
+	responses: commonResponse(TokenPairSchema, "Tokens refreshed", {
+		include: [200, 401, 422, 429, 500],
+	}),
+});
 
-const registerRoute = createRoute({
+AuthRoutes.openapi(RefreshRoute, async (c) => {
+	const { refreshToken } = c.req.valid("json");
+	const data = await c.get("authService").refresh(refreshToken);
+	return ResponseToolkit.success(c, data, t("auth.tokenRefreshed"), 200);
+});
+
+const RegisterRoute = createRoute({
 	method: "post",
 	path: "/register",
-	summary: "User registration",
-	description:
-		"Register a new user account. Email verification link will be sent to the provided email address. Password must meet security requirements: min 8 characters, uppercase, lowercase, number, and special character.",
 	tags: ["Auth"],
-	request: {
-		body: {
-			content: {
-				"application/json": {
-					schema: RegisterSchema,
-					example: {
-						name: "John Doe",
-						email: "john@example.com",
-						password: "SecurePass123!",
-					},
-				},
-			},
-			description: "New user registration data",
-			required: true,
-		},
-	},
-	responses: {
-		...commonResponse(z.null(), "Registration successful", {
-			exclude: [200, 403, 404],
-			validationErrors: {
-				email: ["Email is already in use", "Email format is invalid"],
-				password: [
-					"Password must be at least 8 characters",
-					"Password must contain uppercase, lowercase, number, and special character",
-				],
-				name: ["Name must be at least 3 characters"],
-			},
-		}),
-	},
+	summary: "Register",
+	description:
+		"Create an unverified account and email a verification link. An email already used by a live account is 422.",
+	security: [],
+	request: jsonBody(RegisterSchema),
+	responses: commonResponse(z.null(), "Registered", {
+		include: [201, 422, 429, 500],
+	}),
 });
 
-AuthRoutes.openapi(registerRoute, async (c) => {
-	const { name, email, password } = c.req.valid("json");
-	const service = c.get("authService");
-	await service.register({
-		name,
-		email,
-		password,
-	});
-
-	return ResponseToolkit.success<null, 201>(
-		c,
-		null,
-		t("auth.registerSuccess"),
-		201,
-	);
+AuthRoutes.openapi(RegisterRoute, async (c) => {
+	await c.get("authService").register(c.req.valid("json"));
+	return ResponseToolkit.success(c, null, t("auth.registerSuccess"), 201);
 });
 
-// ============================================================
-// POST /auth/resend-verification
-// ============================================================
-
-const resendVerificationRoute = createRoute({
+const ResendVerificationRoute = createRoute({
 	method: "post",
 	path: "/resend-verification",
+	tags: ["Auth"],
 	summary: "Resend verification email",
 	description:
-		"Resend email verification link to the user's email address. Use this endpoint if the verification email was not received or has expired.",
-	tags: ["Auth"],
-	request: {
-		body: {
-			content: {
-				"application/json": {
-					schema: ResendVerificationSchema,
-					example: {
-						email: "user@example.com",
-					},
-				},
-			},
-			description: "Email address to resend verification link",
-			required: true,
-		},
-	},
-	responses: {
-		...commonResponse(z.null(), "Verification email sent", {
-			exclude: [200, 403, 404],
-			validationErrors: {
-				email: [
-					"Email is already verified",
-					"Email format is invalid",
-					"Email not found",
-				],
-			},
-		}),
-	},
+		"Always 200. A link is mailed only when the address belongs to an unverified live account.",
+	security: [],
+	request: jsonBody(EmailOnlySchema),
+	responses: commonResponse(z.null(), "Accepted", {
+		include: [200, 422, 429, 500],
+	}),
 });
 
-AuthRoutes.openapi(resendVerificationRoute, async (c) => {
-	const { email } = c.req.valid("json");
-	const service = c.get("authService");
-	await service.resendVerification({
-		email,
-	});
-
-	return ResponseToolkit.success<null, 200>(
-		c,
-		null,
-		t("auth.verificationEmailSent"),
-	);
+AuthRoutes.openapi(ResendVerificationRoute, async (c) => {
+	await c.get("authService").resendVerification(c.req.valid("json").email);
+	return ResponseToolkit.success(c, null, t("auth.verificationEmailSent"), 200);
 });
 
-// ============================================================
-// POST /auth/verify-email
-// ============================================================
-
-const verifyEmailRoute = createRoute({
+const VerifyEmailRoute = createRoute({
 	method: "post",
 	path: "/verify-email",
-	summary: "Verify email address",
-	description:
-		"Verify user's email address using the token received via email. This token is sent during registration or when resending verification.",
 	tags: ["Auth"],
-	request: {
-		body: {
-			content: {
-				"application/json": {
-					schema: EmailVerificationSchema,
-					example: {
-						token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.verification_token",
-					},
-				},
-			},
-			description: "Email verification token from verification link",
-			required: true,
-		},
-	},
-	responses: {
-		...commonResponse(z.null(), "Email verified successfully", {
-			exclude: [200, 403, 404],
-			validationErrors: {
-				token: [
-					"Invalid verification token",
-					"Verification token has expired",
-					"Email already verified",
-				],
-			},
-		}),
-	},
+	summary: "Verify email",
+	description:
+		"Consume a verification token. An unknown, expired or used token is 400 on `token`.",
+	security: [],
+	request: jsonBody(VerifyEmailSchema),
+	responses: commonResponse(z.null(), "Email verified", {
+		include: [200, 400, 422, 429, 500],
+	}),
 });
 
-AuthRoutes.openapi(verifyEmailRoute, async (c) => {
-	const { token } = c.req.valid("json");
-	const service = c.get("authService");
-	await service.verifyEmail({ token });
-
-	return ResponseToolkit.success<null, 200>(
-		c,
-		null,
-		t("auth.emailVerified"),
-		200,
-	);
+AuthRoutes.openapi(VerifyEmailRoute, async (c) => {
+	await c.get("authService").verifyEmail(c.req.valid("json").token);
+	return ResponseToolkit.success(c, null, t("auth.emailVerified"), 200);
 });
 
-// ============================================================
-// POST /auth/forgot-password
-// ============================================================
-
-const forgotPasswordRoute = createRoute({
+const ForgotPasswordRoute = createRoute({
 	method: "post",
 	path: "/forgot-password",
-	summary: "Request password reset",
-	description:
-		"Request a password reset link. If the email exists in the system, a password reset link will be sent to the provided email address. The link is valid for a limited time.",
 	tags: ["Auth"],
-	request: {
-		body: {
-			content: {
-				"application/json": {
-					schema: ForgotPasswordSchema,
-					example: {
-						email: "user@example.com",
-					},
-				},
-			},
-			description: "Email address to send password reset link",
-			required: true,
-		},
-	},
-	responses: {
-		...commonResponse(z.null(), "Password reset email sent (if email exists)", {
-			exclude: [201, 403, 404],
-			validationErrors: {
-				email: ["Email format is invalid"],
-			},
-		}),
-	},
+	summary: "Request a password reset",
+	description:
+		"Always 200. A reset link (valid 1 hour) is mailed only when the address belongs to a live account.",
+	security: [],
+	request: jsonBody(EmailOnlySchema),
+	responses: commonResponse(z.null(), "Accepted", {
+		include: [200, 422, 429, 500],
+	}),
 });
 
-AuthRoutes.openapi(forgotPasswordRoute, async (c) => {
-	const { email } = c.req.valid("json");
-	const service = c.get("authService");
-	await service.forgotPassword({
-		email,
-	});
-
-	return ResponseToolkit.success<null, 200>(
+AuthRoutes.openapi(ForgotPasswordRoute, async (c) => {
+	await c.get("authService").forgotPassword(c.req.valid("json").email);
+	return ResponseToolkit.success(
 		c,
 		null,
 		t("auth.resetPasswordEmailSent"),
@@ -293,64 +143,24 @@ AuthRoutes.openapi(forgotPasswordRoute, async (c) => {
 	);
 });
 
-// ============================================================
-// POST /auth/reset-password
-// ============================================================
-
-const resetPasswordRoute = createRoute({
+const ResetPasswordRoute = createRoute({
 	method: "post",
 	path: "/reset-password",
+	tags: ["Auth"],
 	summary: "Reset password",
 	description:
-		"Reset user password using the token received via password reset email. The new password must meet security requirements: min 8 characters, uppercase, lowercase, number, and special character.",
-	tags: ["Auth"],
-	request: {
-		body: {
-			content: {
-				"application/json": {
-					schema: ResetPasswordSchema,
-					example: {
-						token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.reset_token",
-						password: "NewSecure123!",
-					},
-				},
-			},
-			description: "Password reset token and new password",
-			required: true,
-		},
-	},
-	responses: {
-		...commonResponse(z.null(), "Password reset successful", {
-			exclude: [201, 403, 404],
-			validationErrors: {
-				token: [
-					"Invalid reset token",
-					"Reset token has expired",
-					"Reset link already used",
-				],
-				password: [
-					"Password must be at least 8 characters",
-					"Password must contain uppercase, lowercase, number, and special character",
-				],
-			},
-		}),
-	},
+		"Consume a reset token and set `newPassword`. Revokes the user's refresh token. An unknown, expired or used token is 400 on `token`.",
+	security: [],
+	request: jsonBody(ResetPasswordSchema),
+	responses: commonResponse(z.null(), "Password reset", {
+		include: [200, 400, 422, 429, 500],
+	}),
 });
 
-AuthRoutes.openapi(resetPasswordRoute, async (c) => {
-	const { token, password } = c.req.valid("json");
-	const service = c.get("authService");
-	await service.resetPassword({
-		token,
-		password,
-	});
-
-	return ResponseToolkit.success<null, 200>(
-		c,
-		null,
-		t("auth.passwordReset"),
-		200,
-	);
+AuthRoutes.openapi(ResetPasswordRoute, async (c) => {
+	const { token, newPassword } = c.req.valid("json");
+	await c.get("authService").resetPassword(token, newPassword);
+	return ResponseToolkit.success(c, null, t("auth.passwordReset"), 200);
 });
 
 export default AuthRoutes;

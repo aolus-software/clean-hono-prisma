@@ -1,40 +1,48 @@
-# Rule: Services — Business Logic
+# Rule: Services — business logic
 
-Services hold the _what_ and _why_ of a feature. Repositories hold the _how_ of data access. Route handlers are the glue.
+Services hold the _what_ and _why_ of a feature. Repositories hold the _how_ of data access. Route
+handlers are the glue.
 
-## Location
+## Location and shape
 
-- Per-module: `src/modules/<feature>/service.ts`
-- Interface: `src/modules/<feature>/service.interface.ts`
-- Cross-module / domain services: `src/libs/<domain>/*.service.ts` (e.g. mailer)
+- `src/modules/<feature>/service.ts` (the settings sub-modules name it `services.ts`), with its
+  interface in `service.interface.ts`.
+- A service is a **class implementing `I<Name>Service`**, registered in `src/bootstrap.ts`, injected by
+  `diMiddleware`, and read in handlers with `c.get("<name>Service")` (`di.md`). Keep services
+  stateless: no instance fields beyond what the constructor needs, since one instance serves every
+  request.
+
+```ts
+export class RoleService implements IRoleService {
+	async findOne(id: string): Promise<RoleDetail> {
+		const role = await RoleRepository().findDetail(id);
+		if (!role) throw new NotFoundError(t("role.notFound"));
+		return role;
+	}
+}
+```
 
 ## Rules
 
-1. **Services are plain objects, not classes.**
-   ```ts
-   export const AuthService = {
-     async signIn(email: string, password: string): Promise<...> { … },
-   };
-   ```
-   No `this`, no inheritance, no constructors. The export name uses `PascalCaseService`.
-2. **Every service has an interface** in `service.interface.ts`:
-   ```ts
-   export interface IAuthService {
-     signIn(email: string, password: string): Promise<LoginResponse>;
-   }
-   ```
-3. **No Hono or HTTP types inside services.** No `Context`, no `c.json()`, no `c.status()`. Services receive primitives/DTOs and return primitives/DTOs. Route handlers do the HTTP mapping.
-4. **Services orchestrate repositories.** Call `UserRepository().method(...)` — invoke the factory **each call**, never destructure once at module scope.
-5. **Validation is layered.**
-   - Schema validation (shape, format) → Zod in `schema.ts`
-   - Business validation (uniqueness, state machine) → service, throwing custom errors from `@errors`
-6. **Throw, don't return error objects.** Every failure throws `BadRequestError`, `UnauthorizedError`, `NotFoundError`, `ForbiddenError`, `UnprocessableEntityError`. The error handler turns them into proper HTTP responses.
-7. **Wrap multi-write operations in `db.transaction`** and pass `trx` into repositories. See [repositories.md](./repositories.md).
-8. **Cache reads, invalidate on writes.** When a service caches in Redis (e.g. `Cache.set(UserInformationCacheKey(id), …)`), the corresponding write methods in the same service must invalidate the same key. Keep cache keys in `@cache`.
-9. **Log with structured fields and a message:**
-   ```ts
-   log.error({ error, userId }, "Failed to queue verification email");
-   ```
-   Object first, message second. Never log raw passwords/tokens.
-10. **Silent on enumeration-leaky paths.** Endpoints like "forgot password" / "resend verification" must not reveal whether an email exists — `return` early instead of throwing.
-11. **A service does one feature.** Cross-feature flows live in higher-level orchestrators or are coordinated by the route handler.
+1. **No Hono types inside services.** No `Context`, no `c.json()`. Services take DTOs and return DTOs.
+2. **Services orchestrate repositories.** Call the factory each time; pass `tx` inside a transaction.
+3. **Validation is layered.** Shape and format in Zod (`schema.ts`); existence, uniqueness, and state
+   in the service, throwing from `@errors` (`services-crud.md`).
+4. **Throw, don't return error objects.**
+5. **Transactions:** a write touching more than one table runs in
+   `db.$transaction(async (tx) => { ... })` and passes `tx` to every repository call.
+6. **Queue after commit.** Enqueue mail after the transaction resolves, never inside it.
+7. **Cache invalidation is the service's job.** `AuthMiddleware` caches `UserInformation` at
+   `UserInformationCacheKey(id)`. After a write that changes what that object contains or whether the
+   user may authenticate, delete the affected keys:
+   - user update → that user; when the new status is not `ACTIVE`, call `revokeSessions(id)` instead,
+   - delete, admin password reset, password reset, own password change → `revokeSessions(id)`, which
+     also deletes the stored refresh-token id (`RefreshTokenCacheKey`),
+   - profile update → that user (re-cache the fresh value),
+   - role update or delete → every user holding the role,
+   - permission update or delete → every user holding a role that grants it.
+8. **Log with structured fields**, object first: `logger.error({ error, userId }, "...")`. Never log
+   passwords or tokens.
+9. **Silent on enumeration-leaky paths.** `forgotPassword` and `resendVerification` return without
+   error for an unknown, inactive, or already-verified address.
+10. **A service does one feature.**

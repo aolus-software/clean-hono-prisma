@@ -1,163 +1,66 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { ContentfulStatusCode } from "hono/utils/http-status";
 import { ZodError } from "zod";
-import { formatZodError } from "./formatter";
-import { AppError } from "./base.error";
-import { Env } from "@types";
-import { DateToolkit, logger } from "@utils";
-import { AppConfig } from "@config";
-import { ERROR_CODES } from "./error-codes.constant";
 import { t } from "@i18n";
+import { Env } from "@types";
+import { logger } from "@utils/hono/logger";
+import { ResponseToolkit } from "@utils/hono/response";
 
-/**
- * Standard error response format
- */
-interface ErrorResponse {
-	success: false;
-	message: string;
-	code?: string;
-	errors?: unknown;
-	data: null;
-	requestId?: string;
-	trace?: string;
-}
+import { AppError } from "./base.error";
+import { formatZodError } from "./formatter";
 
 export const registerException = (app: Hono<Env>) => {
-	app.notFound((c) => {
-		const requestId = c.get("requestId");
-		return c.json(
-			{
-				success: false,
-				message: t("errors.routeNotFound"),
-				code: ERROR_CODES.ROUTE_NOT_FOUND,
-				errors: [],
-				data: null,
-				requestId,
-			} as ErrorResponse,
-			404,
-		);
-	});
+	app.notFound((c) => ResponseToolkit.error(c, t("errors.routeNotFound"), 404));
 
 	app.onError((err, c) => {
-		const requestId = c.get("requestId");
-
-		if (err instanceof HTTPException && err.status === 422) {
-			return c.json(
-				{
-					success: false,
-					message: err.message,
-					code: ERROR_CODES.VALIDATION_ERROR,
-					errors: err.cause || [],
-					data: null,
-					requestId,
-				} as ErrorResponse,
-				422,
-			);
+		if (err instanceof AppError) {
+			const status = err.statusCode as ContentfulStatusCode;
+			if (status === 400 || status === 422) {
+				return ResponseToolkit.fieldErrors(
+					c,
+					err.message,
+					status,
+					err.errors ?? [],
+				);
+			}
+			if (status === 429) {
+				return ResponseToolkit.rateLimited(c, err.message);
+			}
+			return ResponseToolkit.error(c, err.message, status);
 		}
-
-		logger.error(err, "[Internal Server Error]");
 
 		if (err instanceof ZodError) {
-			return c.json(
-				{
-					success: false,
-					message: t("errors.validationFailed"),
-					code: ERROR_CODES.VALIDATION_ERROR,
-					errors: formatZodError(err),
-					data: null,
-					requestId,
-				} as ErrorResponse,
+			return ResponseToolkit.fieldErrors(
+				c,
+				t("errors.validationFailed"),
 				422,
-			);
-		}
-
-		// Handle custom AppError instances
-		if (err instanceof AppError) {
-			const requestContext = {
-				method: c.req.method,
-				url: c.req.url,
-				userAgent: c.req.header("user-agent"),
-				ip:
-					c.req.header("x-forwarded-for") ||
-					c.req.header("x-real-ip") ||
-					"unknown",
-				timestamp: DateToolkit.now().toISOString(),
-				requestId,
-			};
-
-			logger.error(err, `${err.name}: ${err.message}`, requestContext);
-
-			// Cast to any to avoid Hono's strict status code typing
-			return c.json(
-				{
-					success: false,
-					message: err.message,
-					code: err.errorCode,
-					errors: err.details || [],
-					data: null,
-					requestId,
-				} as ErrorResponse,
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				err.statusCode as any,
+				formatZodError(err),
 			);
 		}
 
 		if (err instanceof HTTPException) {
-			// If the error is a 404 from Hono (e.g. route not found), ensure we return 404
-			if (err.status === 404) {
-				return c.json(
-					{
-						success: false,
-						message: t("errors.routeNotFound"),
-						code: ERROR_CODES.ROUTE_NOT_FOUND,
-						errors: [],
-						data: null,
-						requestId,
-					} as ErrorResponse,
-					404,
-				);
+			if (err.status === 400) {
+				return ResponseToolkit.fieldErrors(c, t("errors.parseFailed"), 400, [
+					{ field: "body", message: t("errors.parseBody") },
+				]);
 			}
-			return c.json(
-				{
-					success: false,
-					message: err.message,
-					code: ERROR_CODES.HTTP_ERROR,
-					errors: [],
-					data: null,
-					requestId,
-				} as ErrorResponse,
-				err.status,
-			);
+			if (err.status === 404) {
+				return ResponseToolkit.error(c, t("errors.routeNotFound"), 404);
+			}
+			return ResponseToolkit.error(c, err.message, err.status);
 		}
 
-		const requestContext = {
-			method: c.req.method,
-			url: c.req.url,
-			userAgent: c.req.header("user-agent"),
-			ip:
-				c.req.header("x-forwarded-for") ||
-				c.req.header("x-real-ip") ||
-				"unknown",
-			timestamp: DateToolkit.now().toISOString(),
-			requestId,
-		};
-
-		logger.error(err, "Internal Server Error", requestContext);
-
-		return c.json(
+		logger.error(
 			{
-				success: false,
-				message: t("errors.internalServerError"),
-				code: ERROR_CODES.INTERNAL_ERROR,
-				errors: [],
-				data: null,
-				requestId,
-				trace:
-					err instanceof Error && AppConfig.APP_ENV !== "production"
-						? err.stack
-						: undefined,
-			} as ErrorResponse,
-			500,
+				err,
+				method: c.req.method,
+				url: c.req.url,
+				requestId: c.get("requestId"),
+			},
+			"Unhandled error",
 		);
+
+		return ResponseToolkit.error(c, t("errors.internalServerError"), 500);
 	});
 };

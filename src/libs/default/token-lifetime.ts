@@ -1,16 +1,11 @@
-import { DateToolkit } from "@utils";
+import { DateToolkit } from "@utils/date";
 
-export const accessTokenLifetime = DateToolkit.addHours(
-	DateToolkit.now(),
-	1,
-).toDate();
+/**
+ * Lifetimes are functions called at issue time. A module-scope constant would
+ * freeze the expiry at process start.
+ */
+export const verificationTokenLifetime = (): Date =>
+	DateToolkit.addHours(DateToolkit.now(), 1).toDate();
 
-export const verificationTokenLifetime = DateToolkit.addHours(
-	DateToolkit.now(),
-	1,
-).toDate();
-
-export const autoDeleteTokenLifetime = DateToolkit.addMonths(
-	DateToolkit.now(),
-	1,
-).toDate();
+export const resetPasswordTokenLifetime = (): Date =>
+	DateToolkit.addHours(DateToolkit.now(), 1).toDate();

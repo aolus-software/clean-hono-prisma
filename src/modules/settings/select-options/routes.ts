@@ -1,84 +1,57 @@
 import { createRoute, OpenAPIHono } from "@hono/zod-openapi";
+import { defaultHook } from "@errors";
+import { roleGuard, withGuardDescription } from "@guards";
+import { AuthMiddleware } from "@hono-libs/middlewares/security/auth.middleware";
 import { commonResponse } from "@hono-libs/schemas";
-import { ResponseToolkit } from "@utils";
 import { t } from "@i18n";
+import { Env } from "@types";
+import { ResponseToolkit } from "@utils";
 
 import {
-	PermissionSelectOptionsResponseSchema,
-	RoleSelectOptionsResponseSchema,
+	PermissionSelectOptionsSchema,
+	RoleSelectOptionsSchema,
 } from "./schema";
-import { AuthMiddleware } from "@hono-libs";
-import { Env } from "@types";
 
-const SelectOptionsRoutes = new OpenAPIHono<Env>();
+const SelectOptionsRoutes = new OpenAPIHono<Env>({ defaultHook });
 
-SelectOptionsRoutes.use(AuthMiddleware);
-
-// -------------------
-// GET /settings/select-options/permissions
-// -------------------
 const PermissionSelectOptionsRoute = createRoute({
 	method: "get",
 	path: "/permissions",
 	tags: ["Settings/Select Options"],
 	security: [{ Bearer: [] }],
-	responses: {
-		200: {
-			content: {
-				"application/json": {
-					schema: PermissionSelectOptionsResponseSchema,
-				},
-			},
-			description: "Permission select options",
-		},
-		...commonResponse(
-			PermissionSelectOptionsResponseSchema,
-			"PermissionSelectOptionsResponse",
-			{
-				exclude: [200, 201],
-			},
-		),
-	},
+	summary: "Permission options",
+	description: withGuardDescription("Every permission, grouped.", {
+		roles: ["superuser"],
+	}),
+	middleware: [AuthMiddleware, roleGuard(["superuser"])] as const,
+	responses: commonResponse(PermissionSelectOptionsSchema, "Options", {
+		include: [200, 401, 403, 429, 500],
+	}),
 });
 
 SelectOptionsRoutes.openapi(PermissionSelectOptionsRoute, async (c) => {
-	const service = c.get("settingSelectOption");
-	const options = await service.getPermissionOptions();
-
+	const options = await c.get("settingSelectOption").getPermissionOptions();
 	return ResponseToolkit.success(c, options, t("common.retrieved"), 200);
 });
 
-// -------------------
-// GET /settings/select-options/roles
-// -------------------
 const RoleSelectOptionsRoute = createRoute({
 	method: "get",
 	path: "/roles",
 	tags: ["Settings/Select Options"],
 	security: [{ Bearer: [] }],
-	responses: {
-		200: {
-			content: {
-				"application/json": {
-					schema: RoleSelectOptionsResponseSchema,
-				},
-			},
-			description: "Role select options",
-		},
-		...commonResponse(
-			RoleSelectOptionsResponseSchema,
-			"RoleSelectOptionsResponse",
-			{
-				exclude: [200, 201],
-			},
-		),
-	},
+	summary: "Role options",
+	description: withGuardDescription(
+		"Every role except superuser, ordered by name.",
+		{ roles: ["superuser"] },
+	),
+	middleware: [AuthMiddleware, roleGuard(["superuser"])] as const,
+	responses: commonResponse(RoleSelectOptionsSchema, "Options", {
+		include: [200, 401, 403, 429, 500],
+	}),
 });
 
 SelectOptionsRoutes.openapi(RoleSelectOptionsRoute, async (c) => {
-	const service = c.get("settingSelectOption");
-	const options = await service.getRoleOptions();
-
+	const options = await c.get("settingSelectOption").getRoleOptions();
 	return ResponseToolkit.success(c, options, t("common.retrieved"), 200);
 });
 

@@ -4,17 +4,23 @@ import type {
 	UserDetail,
 	UserList,
 } from "@types";
-import type { z } from "@hono/zod-openapi";
-import { UserCreateSchema, UserUpdateSchema } from "./schema";
+
+import type { UserCreateInput, UserUpdateInput } from "./schema";
 
 export interface IUserService {
-	findAll(queryParam: DatatableType): Promise<PaginationResponse<UserList>>;
+	findAll(query: DatatableType): Promise<PaginationResponse<UserList>>;
 
-	create(data: z.infer<typeof UserCreateSchema>): Promise<void>;
+	create(data: UserCreateInput): Promise<void>;
 
 	findOne(id: string): Promise<UserDetail>;
 
-	update(data: z.infer<typeof UserUpdateSchema>, id: string): Promise<void>;
+	update(id: string, data: UserUpdateInput): Promise<void>;
+
+	resetPassword(id: string, newPassword: string): Promise<void>;
+
+	sendVerificationEmail(id: string): Promise<void>;
+
+	sendResetPasswordEmail(id: string): Promise<void>;
 
 	delete(id: string): Promise<void>;
 }

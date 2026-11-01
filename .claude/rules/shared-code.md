@@ -8,16 +8,17 @@ If a piece of code is used by **more than one module** — or could plausibly be
 
 | Bucket              | Alias          | Belongs here                                                                                      |
 | ------------------- | -------------- | ------------------------------------------------------------------------------------------------- |
-| `libs/cache/`       | `@cache`       | Cache wrapper and cache-key builders (`UserInformationCacheKey`, …)                               |
+| `libs/cache/`       | `@cache`       | Cache wrapper, cache-key builders (`UserInformationCacheKey`, `RefreshTokenCacheKey`), `revokeSessions` |
 | `libs/config/`      | `@config`      | Env-derived config objects (`AppConfig`, `DatabaseConfig`, `MailConfig`, …)                       |
-| `libs/database/`    | `@database`    | `db` instance, Drizzle `schema`, table exports, `DbTransaction`, `RedisClient`, ClickHouse client |
-| `libs/default/`     | `@default`     | Stable cross-feature constants (`StrongPassword`, `paginationLength`, `defaultSort`, …)           |
+| `libs/database/`    | `@database`    | Prisma `db` client, repositories, seeders, `RedisClient`, ClickHouse client                       |
+| `libs/default/`     | `@default`     | Stable cross-feature constants and lifetime functions (`StrongPassword`, `paginationLength`, `defaultSort`, `verificationTokenLifetime()`) |
 | `libs/hono/errors/` | `@errors`      | Custom error classes (`BadRequestError`, `NotFoundError`, `UnauthorizedError`, …)                 |
-| `libs/hono/guards/` | `@guards`      | Authorization guards (`PermissionGuard`, `RoleGuard`, `Guards.*`)                                 |
-| `libs/hono/`        | `@hono-libs`   | Hono middlewares, core container, and shared Hono utilities                                       |
+| `libs/hono/guards/` | `@guards`      | Authorization guards (`permissionGuard`, `roleGuard`)                                             |
+| `libs/hono/`        | `@hono-libs`   | Hono middlewares, the DI container, shared Zod schemas (`@hono-libs/schemas`)                     |
 | `libs/mail/`        | `@mail`        | Mail transport, templates, and mail services                                                      |
-| `libs/types/`       | `@types`       | Shared TypeScript types (DTOs, query-param types, enums)                                          |
-| `libs/utils/`       | `@utils`       | Pure helpers (`Hash`, `log`, `ResponseToolkit`, `DatatableToolkit`, date/number/string utilities)  |
+| `libs/types/`       | `@types`       | Shared TypeScript types (DTOs, `DatatableType`, `datatableQuerySchema`)                           |
+| `libs/i18n/`        | `@i18n`        | Translator, catalogs, locale store                                                                |
+| `libs/utils/`       | `@utils`       | Helpers (`Hash`, `logger`, `ResponseToolkit`, `DatatableToolkit`, `JWTToolkit`, date/number/string) |
 
 The BullMQ tree (`@bull` → `src/bull/`) sits beside `libs/` but follows the same "no module-local imports" principle.
 

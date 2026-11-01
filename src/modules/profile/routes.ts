@@ -1,173 +1,84 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { commonResponse } from "@hono-libs/schemas";
-import { ResponseToolkit } from "@utils";
 import { defaultHook } from "@errors";
+import { AuthMiddleware } from "@hono-libs/middlewares/security/auth.middleware";
+import { commonResponse } from "@hono-libs/schemas";
 import { t } from "@i18n";
-import { UpdatePasswordSchema, UpdateProfileSchema } from "./schema";
-import { ProfileService } from "./service";
 import { Env, ZodUserInformation } from "@types";
-import { AuthMiddleware } from "@hono-libs/middlewares/index";
+import { ResponseToolkit } from "@utils";
+
+import { UpdatePasswordSchema, UpdateProfileSchema } from "./schema";
 
 const ProfileRoutes = new OpenAPIHono<Env>({ defaultHook });
 
-// Apply auth middleware to all profile routes
-ProfileRoutes.use("*", AuthMiddleware);
-
-// ============================================================
-// GET /profile
-// ============================================================
-
 const GetProfileRoute = createRoute({
 	method: "get",
-	path: "/",
-	summary: "Get current user profile",
-	description:
-		"Retrieve the authenticated user's profile information including name, email, role, and other account details. Requires valid JWT token.",
+	path: "",
 	tags: ["Profile"],
-	security: [
-		{
-			Bearer: [],
-		},
-	],
-	responses: {
-		...commonResponse(
-			ZodUserInformation,
-			"User profile retrieved successfully",
-			{
-				exclude: [201, 422, 402, 404, 403],
-			},
-		),
-	},
+	summary: "Current user",
+	description: "The authenticated user's identity, roles and permissions.",
+	security: [{ Bearer: [] }],
+	middleware: [AuthMiddleware] as const,
+	responses: commonResponse(ZodUserInformation, "Profile", {
+		include: [200, 401, 429, 500],
+	}),
 });
 
-ProfileRoutes.openapi(GetProfileRoute, (c) => {
-	const user = c.get("currentUser");
-
-	return ResponseToolkit.success(c, user, t("profile.retrieved"), 200);
-});
-
-// ============================================================
-// PUT /profile
-// ============================================================
+ProfileRoutes.openapi(GetProfileRoute, (c) =>
+	ResponseToolkit.success(c, c.get("currentUser"), t("profile.retrieved"), 200),
+);
 
 const UpdateProfileRoute = createRoute({
-	method: "put",
+	method: "patch",
 	path: "",
-	summary: "Update user profile",
-	description:
-		"Update the authenticated user's profile information. All fields are optional but at least one field should be provided. Email changes may require re-verification.",
 	tags: ["Profile"],
-	security: [
-		{
-			Bearer: [],
-		},
-	],
+	summary: "Update profile",
+	description:
+		"Update the authenticated user's name and email. An email used by another live account is 422.",
+	security: [{ Bearer: [] }],
+	middleware: [AuthMiddleware] as const,
 	request: {
 		body: {
-			content: {
-				"application/json": {
-					schema: UpdateProfileSchema,
-					example: {
-						name: "John Doe",
-						email: "john.doe@example.com",
-						remarks: "Senior Software Engineer",
-					},
-				},
-			},
-			description: "Updated profile information",
+			content: { "application/json": { schema: UpdateProfileSchema } },
 			required: true,
 		},
 	},
-	responses: {
-		...commonResponse(ZodUserInformation, "User profile updated successfully", {
-			exclude: [201, 402, 404, 403],
-			validationErrors: {
-				name: ["Name must be at least 1 character", "Name is required"],
-				email: ["Invalid email format", "Email is already in use"],
-				remarks: ["Remarks must not exceed 500 characters"],
-			},
-		}),
-	},
+	responses: commonResponse(ZodUserInformation, "Profile updated", {
+		include: [200, 401, 422, 429, 500],
+	}),
 });
 
 ProfileRoutes.openapi(UpdateProfileRoute, async (c) => {
-	const user = c.get("currentUser");
-	const updateData = c.req.valid("json");
-	const service = c.get("profileService");
-	const result = await service.updateUserProfile(user, updateData);
-
-	return ResponseToolkit.success(c, result, t("profile.updated"), 200);
+	const user = await c
+		.get("profileService")
+		.updateProfile(c.get("currentUser").id, c.req.valid("json"));
+	return ResponseToolkit.success(c, user, t("profile.updated"), 200);
 });
 
-// ============================================================
-// PUT /profile/password
-// ============================================================
-
 const UpdatePasswordRoute = createRoute({
-	method: "put",
+	method: "patch",
 	path: "/password",
-	summary: "Change user password",
-	description:
-		"Change the authenticated user's password. Requires current password for verification. New password must meet security requirements: min 8 characters, uppercase, lowercase, number, and special character. New password must be different from current password.",
 	tags: ["Profile"],
-	security: [
-		{
-			Bearer: [],
-		},
-	],
+	summary: "Change password",
+	description:
+		"Change the authenticated user's password. A wrong `currentPassword` is 422. Success drops the cached user; refresh tokens are stateless, so ones already issued stay valid until they expire.",
+	security: [{ Bearer: [] }],
+	middleware: [AuthMiddleware] as const,
 	request: {
 		body: {
-			content: {
-				"application/json": {
-					schema: UpdatePasswordSchema,
-					example: {
-						current_password: "OldPass123!",
-						new_password: "NewSecure123!",
-					},
-				},
-			},
-			description: "Current password and new password",
+			content: { "application/json": { schema: UpdatePasswordSchema } },
 			required: true,
 		},
 	},
-	responses: {
-		...commonResponse(
-			z.object({
-				message: z
-					.string()
-					.openapi({ example: "Password updated successfully" }),
-			}),
-			"User password updated successfully",
-			{
-				exclude: [201, 402, 404, 403],
-				validationErrors: {
-					current_password: [
-						"Current password is required",
-						"Current password is incorrect",
-					],
-					new_password: [
-						"New password must be at least 8 characters",
-						"New password must contain uppercase, lowercase, number, and special character",
-						"New password must be different from current password",
-					],
-				},
-			},
-		),
-	},
+	responses: commonResponse(z.null(), "Password changed", {
+		include: [200, 401, 422, 429, 500],
+	}),
 });
 
 ProfileRoutes.openapi(UpdatePasswordRoute, async (c) => {
-	// ✨ Typed context - automatic type inference!
-	const user = c.get("currentUser");
-
-	await new ProfileService().changeUserPassword(user, c.req.valid("json"));
-
-	return ResponseToolkit.success(
-		c,
-		{ message: t("profile.passwordChanged") },
-		t("profile.passwordChanged"),
-		200,
-	);
+	await c
+		.get("profileService")
+		.changePassword(c.get("currentUser").id, c.req.valid("json"));
+	return ResponseToolkit.success(c, null, t("profile.passwordChanged"), 200);
 });
 
 export default ProfileRoutes;

@@ -1,61 +1,84 @@
+import { forgetUserInformation } from "@cache";
 import {
+	db,
+	PermissionRepository,
+	Prisma,
+	RoleRepository,
+	UserRepository,
+} from "@database";
+import { NotFoundError, UnprocessableEntityError } from "@errors";
+import { t } from "@i18n";
+import type {
 	DatatableType,
 	PaginationResponse,
-	RoleList,
 	RoleDetail,
+	RoleList,
 } from "@types";
-import { RoleRepository } from "@database";
-import { z } from "@hono/zod-openapi";
-import { RoleCreateSchema, RoleUpdateSchema } from "./schema";
-import { IRoleService } from "./service.interface";
-import { NotFoundError } from "@errors";
-import { t } from "@i18n";
+
+import type { RoleInput } from "./schema";
+import type { IRoleService } from "./service.interface";
 
 export class RoleService implements IRoleService {
-	async findAll(
-		queryParam: DatatableType,
-	): Promise<PaginationResponse<RoleList>> {
-		const result = await RoleRepository().findAll({
-			page: queryParam.page,
-			limit: queryParam.limit,
-			sort_by: queryParam.sort,
-			sort_order: queryParam.sortDirection,
-			search: queryParam.search ?? undefined,
-		});
-		return {
-			data: result.data,
-			meta: {
-				page: queryParam.page,
-				limit: queryParam.limit,
-				totalCount: result.total,
-			},
-		};
+	async findAll(query: DatatableType): Promise<PaginationResponse<RoleList>> {
+		return RoleRepository().findAll(query);
 	}
 
-	async create(data: z.infer<typeof RoleCreateSchema>): Promise<void> {
-		await RoleRepository().create({
-			name: data.name,
-			permission_ids: data.permission_ids,
+	async create(data: RoleInput): Promise<void> {
+		await this.assertNameFree(data.name);
+		await this.assertPermissionsExist(data.permissionIds);
+
+		await db.$transaction(async (tx: Prisma.TransactionClient) => {
+			await RoleRepository(tx).create(data);
 		});
 	}
 
 	async findOne(id: string): Promise<RoleDetail> {
+		const role = await RoleRepository().getDetail(id);
+		if (!role) throw new NotFoundError(t("role.notFound"));
+		return role;
+	}
+
+	async update(id: string, data: RoleInput): Promise<void> {
+		await this.findExisting(id);
+		await this.assertNameFree(data.name, id);
+		await this.assertPermissionsExist(data.permissionIds);
+
+		await db.$transaction(async (tx: Prisma.TransactionClient) => {
+			await RoleRepository(tx).update(id, data);
+		});
+		await forgetUserInformation(await UserRepository().findIdsByRoleIds([id]));
+	}
+
+	async delete(id: string): Promise<void> {
+		await this.findExisting(id);
+		const holders = await UserRepository().findIdsByRoleIds([id]);
+		await RoleRepository().delete(id);
+		await forgetUserInformation(holders);
+	}
+
+	private async findExisting(id: string): Promise<RoleList> {
 		const role = await RoleRepository().findById(id);
 		if (!role) throw new NotFoundError(t("role.notFound"));
 		return role;
 	}
 
-	async update(
-		data: z.infer<typeof RoleUpdateSchema>,
-		id: string,
+	private async assertNameFree(
+		name: string,
+		excludeId?: string,
 	): Promise<void> {
-		await RoleRepository().update(id, {
-			name: data.name,
-			permission_ids: data.permission_ids,
-		});
+		if (await RoleRepository().findByName(name, excludeId)) {
+			throw new UnprocessableEntityError(t("role.nameExists"), [
+				{ field: "name", message: t("role.nameExists") },
+			]);
+		}
 	}
 
-	async delete(id: string): Promise<void> {
-		await RoleRepository().delete(id);
+	private async assertPermissionsExist(permissionIds: string[]): Promise<void> {
+		const unique = Array.from(new Set(permissionIds));
+		if ((await PermissionRepository().countByIds(unique)) !== unique.length) {
+			throw new UnprocessableEntityError(t("role.invalidPermissions"), [
+				{ field: "permissionIds", message: t("role.invalidPermissions") },
+			]);
+		}
 	}
 }

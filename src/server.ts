@@ -8,7 +8,7 @@ const workerId = process.env.CLUSTER_WORKER_ID ?? "single";
 const server = Bun.serve({
 	port: AppConfig.APP_PORT,
 	fetch: app.fetch,
-	reusePort: true,
+	reusePort: AppConfig.APP_CLUSTER_MODE || AppConfig.APP_REUSE_PORT,
 });
 
 logger.info(
