@@ -16,8 +16,9 @@ throws.** A repository importing `NotFoundError` would make persistence depend o
 | Related ids exist        | `countByIds(ids)`                          | 422 on `roleIds` / `permissionIds`                    |
 
 **Uniqueness is 422, everywhere** — create, update, register, profile update. Never 409, never a
-Prisma `P2002` surfacing as 500. The email check is a service check because `User.email` has no
-database unique constraint (soft-deleted users keep their address).
+Prisma `P2002` surfacing as 500. The email check is a service check; the partial unique index
+`User_email_key` (live users only, soft-deleted users keep their address) is a backstop, not the
+check.
 
 ## findAll
 

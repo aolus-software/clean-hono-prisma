@@ -28,14 +28,22 @@ rather than restating the strings.
 - `createdAt DateTime @default(now())`, `updatedAt DateTime @updatedAt` on every model, join tables
   included.
 - Soft delete on `User` only: `deletedAt DateTime?`. Every read filters it (`repositories.md`).
-- `User.email` has **no** unique constraint — a soft-deleted user keeps the address and a new account
-  may reuse it. Live uniqueness is the service's check (`services-crud.md`). The composite index
-  `@@index([email, deletedAt, status])` serves that lookup.
+- `User.email` is unique **among live users only**: `@@unique([email], where: { deletedAt: null })`
+  becomes the partial unique index `User_email_key` (`WHERE "deletedAt" IS NULL`). It needs the
+  `partialIndexes` preview feature in the generator block. A soft-deleted user keeps the address and
+  a new account may reuse it. The service's `findLiveByEmail` check still runs first, so the caller
+  gets a 422 rather than a `P2002` 500 (`services-crud.md`); the index is the backstop for a race.
+  The composite index `@@index([email, deletedAt, status])` serves that lookup. Prisma now lists
+  `email` in `UserWhereUniqueInput`; don't use `findUnique({ where: { email } })` — user reads keep
+  their explicit `deletedAt: null` filter (`repositories.md`).
 
 ## Relations and cascade
 
 - Join tables (`UserRole`, `RolePermission`) use a composite `@@id` and `onDelete: Cascade` on both
   sides, so hard-deleting a role or permission removes its assignments.
+- The composite keys lead with `userId` / `roleId`, so lookups by the second column ("who holds this
+  role", "which roles grant this permission", and the cascade from `Role` / `Permission`) need their
+  own `@@index([roleId])` on `UserRole` and `@@index([permissionId])` on `RolePermission`.
 - Token tables cascade from `User`.
 - New relations state `onDelete` explicitly; Prisma's default (`Restrict`) turns a delete into a 500.
 
@@ -69,7 +77,7 @@ token stamps the user's earlier unused ones first (revoke on issue).
 ## Don't
 
 1. Don't add `@@map` / `@map`.
-2. Don't make `User.email` unique.
+2. Don't make `User.email` unique across all rows; it is unique among live users only.
 3. Don't store a token without `expiresAt`, or delete a token row to mark it used.
 4. Don't compute an expiry at module load.
 5. Don't commit `prisma/generated/`.

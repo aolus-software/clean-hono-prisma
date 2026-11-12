@@ -32,6 +32,12 @@ services:
     image: postgres:18
     container_name: hono-prisma-postgres
     restart: unless-stopped
+    command:
+      [
+        "postgres",
+        "-c",
+        "log_min_duration_statement=${POSTGRES_SLOW_QUERY_MS:-100}",
+      ]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-hono_clean}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}

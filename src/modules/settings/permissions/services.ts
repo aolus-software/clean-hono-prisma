@@ -1,4 +1,4 @@
-import { forgetUserInformation } from "@cache";
+import { forgetSelectOptions, forgetUserInformation } from "@cache";
 import {
 	PermissionRepository,
 	RoleRepository,
@@ -38,6 +38,7 @@ export class PermissionService implements IPermissionService {
 		await PermissionRepository().createMany(
 			names.map((name) => ({ name, group: data.group })),
 		);
+		await forgetSelectOptions();
 	}
 
 	async findOne(id: string): Promise<PermissionList> {
@@ -56,6 +57,7 @@ export class PermissionService implements IPermissionService {
 
 		await PermissionRepository().update(id, data);
 		await forgetUserInformation(await this.holdersOf(id));
+		await forgetSelectOptions();
 	}
 
 	async delete(id: string): Promise<void> {
@@ -63,6 +65,7 @@ export class PermissionService implements IPermissionService {
 		const holders = await this.holdersOf(id);
 		await PermissionRepository().delete(id);
 		await forgetUserInformation(holders);
+		await forgetSelectOptions();
 	}
 
 	private async holdersOf(permissionId: string): Promise<string[]> {

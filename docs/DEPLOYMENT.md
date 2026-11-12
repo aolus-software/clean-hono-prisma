@@ -23,8 +23,9 @@ APP_CLUSTER_MODE=true APP_CLUSTER_WORKERS=0 bun run start   # 0 -> one worker pe
 `src/index.ts` runs `src/cluster.ts`, which spawns `APP_CLUSTER_WORKERS` Bun child processes running
 the same entry. Each worker serves on `APP_PORT` with `reusePort`, and the kernel balances
 connections (Linux). A crashed worker is respawned after 1 s; `SIGINT` / `SIGTERM` to the primary
-stops every worker. Each worker also runs the BullMQ mail worker and keeps its own in-memory rate
-limit counter.
+stops every worker. Each worker also runs the BullMQ mail worker, keeps its own in-memory rate
+limit counter, and opens its own PostgreSQL pool of `DB_POOL_MAX` connections: keep
+`workers x DB_POOL_MAX` under the server's `max_connections`.
 
 ## 3. Reuse-port without cluster mode
 
