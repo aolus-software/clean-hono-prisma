@@ -26,6 +26,10 @@ export const env = cleanEnv(process.env, {
 	DATABASE_URL: str({
 		default: "postgresql://postgres:postgres@localhost:5432/hono_clean",
 	}),
+	DB_POOL_MAX: num({ default: 10 }),
+	DB_POOL_IDLE_TIMEOUT_MS: num({ default: 30000 }),
+	DB_POOL_CONNECTION_TIMEOUT_MS: num({ default: 5000 }),
+	DB_LOG_QUERIES: bool({ default: false }),
 
 	REDIS_HOST: host({ default: "localhost" }),
 	REDIS_PORT: port({ default: 6379 }),

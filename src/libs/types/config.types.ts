@@ -28,6 +28,10 @@ export interface AppConfig {
  */
 export interface DatabaseConfig {
 	DATABASE_URL: URL;
+	DB_POOL_MAX: number;
+	DB_POOL_IDLE_TIMEOUT_MS: number;
+	DB_POOL_CONNECTION_TIMEOUT_MS: number;
+	DB_LOG_QUERIES: boolean;
 }
 
 /**

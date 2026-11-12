@@ -8,7 +8,7 @@ If a piece of code is used by **more than one module** — or could plausibly be
 
 | Bucket              | Alias          | Belongs here                                                                                      |
 | ------------------- | -------------- | ------------------------------------------------------------------------------------------------- |
-| `libs/cache/`       | `@cache`       | Cache wrapper, cache-key builders (`UserInformationCacheKey`, `RefreshTokenCacheKey`), `revokeSessions` |
+| `libs/cache/`       | `@cache`       | Cache wrapper, cache-key builders (`UserInformationCacheKey`, `RefreshTokenCacheKey`), `revokeSessions`, `forgetSelectOptions` |
 | `libs/config/`      | `@config`      | Env-derived config objects (`AppConfig`, `DatabaseConfig`, `MailConfig`, …)                       |
 | `libs/database/`    | `@database`    | Prisma `db` client, repositories, seeders, `RedisClient`, ClickHouse client                       |
 | `libs/default/`     | `@default`     | Stable cross-feature constants and lifetime functions (`StrongPassword`, `paginationLength`, `defaultSort`, `verificationTokenLifetime()`) |

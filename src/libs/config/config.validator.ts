@@ -193,6 +193,17 @@ export const validateDatabaseConfig = (
 		);
 	}
 
+	if (!Number.isInteger(config.DB_POOL_MAX) || config.DB_POOL_MAX < 1) {
+		errors.push(
+			createError(
+				"DB_POOL_MAX",
+				String(config.DB_POOL_MAX),
+				"integer >= 1",
+				"Pool size must be at least 1",
+			),
+		);
+	}
+
 	return {
 		valid: errors.length === 0,
 		errors,

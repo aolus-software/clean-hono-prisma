@@ -50,8 +50,10 @@ cp .env.example .env
 ```
 
 Replace `JWT_SECRET` and `JWT_REFRESH_SECRET` (both required, `openssl rand -base64 48`). Every other
-value in `.env.example` works as-is for local development. See
-[docs/CONFIGURATION.md](./docs/CONFIGURATION.md) for every variable.
+value in `.env.example` works as-is for local development. The PostgreSQL pool is sized per process
+with `DB_POOL_MAX` / `DB_POOL_IDLE_TIMEOUT_MS` / `DB_POOL_CONNECTION_TIMEOUT_MS`, `DB_LOG_QUERIES=true`
+logs statements at `debug`, and the compose postgres logs anything slower than
+`POSTGRES_SLOW_QUERY_MS`. See [docs/CONFIGURATION.md](./docs/CONFIGURATION.md) for every variable.
 
 ## Database Setup
 

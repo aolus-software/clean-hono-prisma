@@ -63,7 +63,7 @@ with password `S3crEtP4ssw0rd!`. Running it twice changes nothing; a failure exi
 | ------------------- | ---------------------- | -------------------------------------------------------------------------- |
 | `@config`           | `src/libs/config`      | envalid `env` and the config objects (`AppConfig`, `JWT_CONFIG`, ...)      |
 | `@database`         | `src/libs/database`    | Prisma `db`, repositories, Redis client, ClickHouse                        |
-| `@cache`            | `src/libs/cache`       | `Cache`, cache keys, `forgetUserInformation`, `revokeSessions`             |
+| `@cache`            | `src/libs/cache`       | `Cache`, cache keys, `forget*` helpers, `revokeSessions`                   |
 | `@default`          | `src/libs/default`     | constants and token lifetime functions                                     |
 | `@hono-libs`        | `src/libs/hono`        | middlewares, DI container, shared Zod schemas                              |
 | `@errors`           | `src/libs/hono/errors` | error classes, `registerException`, `defaultHook`                          |
@@ -102,6 +102,10 @@ workers) or `src/server.ts` (`Bun.serve` on `app.fetch`, imports `@bull`); `src/
 - **`UserInformation` is cached** at `UserInformationCacheKey(id)` for 3600 s. The DB read requires
   `status: ACTIVE` and `deletedAt: null`. Every write that changes a user's status, roles, profile,
   password or deletion, and every role/permission update or delete, deletes the affected keys.
+- **Select-option lists are cached** at `PermissionSelectOptionsCacheKey()` / `RoleSelectOptionsCacheKey()`
+  for 3600 s; every role or permission create, update or delete calls `forgetSelectOptions()`.
+- **The pool is per process** (`DB_POOL_*`); `DB_LOG_QUERIES=true` logs statements at `debug`, and the
+  compose postgres logs anything slower than `POSTGRES_SLOW_QUERY_MS`.
 - **Repositories are factories**: `UserRepository()` or `UserRepository(tx)`. Reads return `null`; the
   service throws `NotFoundError`. Lists validate sort and filter keys against exported allow-lists
   (400 for an unknown filter key, 422 for a bad `sort`), and `filter[<key>]` params are read off the
@@ -114,8 +118,9 @@ workers) or `src/server.ts` (`Bun.serve` on `app.fetch`, imports `@bull`); `src/
   `JWT_REFRESH_SECRET` are required.
 - **`/docs` exists only when `ENABLE_API_DOCS=true`** (default false, independent of `NODE_ENV`).
 - **Mail is queued after the transaction commits**; the worker runs in every API process.
-- **Users are soft-deleted** (`deletedAt`); `User.email` has no DB unique constraint, so live
-  uniqueness is the service's `findLiveByEmail` check.
+- **Users are soft-deleted** (`deletedAt`); `User.email` is unique among live users only, through
+  the partial unique index `User_email_key` (`WHERE "deletedAt" IS NULL`, Prisma `partialIndexes`
+  preview). The service's `findLiveByEmail` check still runs first so a conflict is a 422.
 - **Prisma default names**, camelCase columns, UPPERCASE `UserStatus` values on the wire. The build
   bundles to `dist/index.js`, so mail templates are copied to `dist/templates`.
 - **Cluster mode** spawns `APP_CLUSTER_WORKERS` Bun processes sharing the port via `reusePort`. The rate
